@@ -174,6 +174,10 @@ class QtRemotePublishController(BasePublisherController):
             self.publish_has_validation_errors = event["value"]
             return
 
+        if event.topic == "publish.has_validation_warnings.changed":
+            self.publish_has_validation_warnings = event["value"]
+            return
+
         if event.topic == "publish.finished.changed":
             self.publish_has_finished = event["value"]
             return
@@ -365,7 +369,7 @@ class QtRemotePublishController(BasePublisherController):
         pass
 
     @abstractmethod
-    def get_validation_errors(self):
+    def get_validation_report_items(self):
         pass
 
     @abstractmethod

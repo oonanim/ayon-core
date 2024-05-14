@@ -10,6 +10,7 @@ from .publish_plugins import (
     AbstractMetaContextPlugin,
 
     PublishValidationError,
+    PublishValidationWarning,
     PublishXmlValidationError,
     KnownPublishError,
     AYONPyblishPluginMixin,
@@ -61,6 +62,7 @@ __all__ = (
     "AbstractMetaContextPlugin",
 
     "PublishValidationError",
+    "PublishValidationWarning",
     "PublishXmlValidationError",
     "KnownPublishError",
     "AYONPyblishPluginMixin",

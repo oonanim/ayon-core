@@ -13,15 +13,17 @@ class PluginItem:
         self.skipped = plugin_data["skipped"]
         self.passed = plugin_data["passed"]
 
-        errored = False
+        warned, errored = False, False
         for instance_data in plugin_data["instances_data"]:
             for log_item in instance_data["logs"]:
                 errored = log_item["type"] == "error"
                 if errored:
                     break
+                warned = log_item["levelno"] >= 30
             if errored:
                 break
 
+        self.warned = warned and not errored
         self.errored = errored
 
     @property
