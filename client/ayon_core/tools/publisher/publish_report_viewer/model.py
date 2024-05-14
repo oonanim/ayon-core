@@ -8,6 +8,7 @@ from .constants import (
     ITEM_ID_ROLE,
     ITEM_IS_GROUP_ROLE,
     ITEM_LABEL_ROLE,
+    ITEM_WARNED_ROLE,
     ITEM_ERRORED_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
@@ -174,6 +175,7 @@ class PluginsModel(QtGui.QStandardItemModel):
                 item.setData(plugin_item.id, ITEM_ID_ROLE)
                 item.setData(plugin_item.skipped, PLUGIN_SKIPPED_ROLE)
                 item.setData(plugin_item.passed, PLUGIN_PASSED_ROLE)
+                item.setData(plugin_item.warned, ITEM_WARNED_ROLE)
                 item.setData(plugin_item.errored, ITEM_ERRORED_ROLE)
                 items.append(item)
                 self._items_by_id[plugin_item.id] = item
