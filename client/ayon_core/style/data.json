@@ -92,7 +92,7 @@
             }
         },
         "publisher": {
-            "error": "#AA5050",
+            "error": "#FC565B",
             "crash": "#FF6432",
             "success": "#458056",
             "warning": "#ffc671",

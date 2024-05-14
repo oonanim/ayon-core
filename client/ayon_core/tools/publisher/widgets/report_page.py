@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import collections
 import logging
+from ayon_core.tools.publisher.publish_report_viewer.delegates import colors
 
 try:
     import commonmark
@@ -40,10 +41,10 @@ INFO_VISIBLE = 1 << 6
 
 
 class VerticalScrollArea(QtWidgets.QScrollArea):
-    """Scroll area for validation error titles.
+    """Scroll area for validation error or warning titles.
 
     The biggest difference is that the scroll area has scroll bar on left side
-    and resize of content will also resize scrollarea itself.
+    and resize of content will also resize scroll area itself.
 
     Resize if deferred by 100ms because at the moment of resize are not yet
     propagated sizes and visibility of scroll bars.
@@ -156,7 +157,7 @@ class ActionButton(BaseClickableFrame):
 class ValidateActionsWidget(QtWidgets.QFrame):
     """Wrapper widget for plugin actions.
 
-    Change actions based on selected validation error.
+    Change actions based on selected validation report item.
     """
 
     def __init__(self, controller, parent):
@@ -202,28 +203,39 @@ class ValidateActionsWidget(QtWidgets.QFrame):
                 widget.deleteLater()
         self._actions_mapping = {}
 
-    def set_error_info(self, error_info):
-        """Set selected plugin and show it's actions.
+    def set_report_item_info(self, report_item_info):
+        """Set selected plugin and show its actions.
 
         Clears current actions from widget and recreate them from the plugin.
 
         Args:
-            Dict[str, Any]: Object holding error items, title and possible
+            Dict[str, Any]: Object holding validation report items, title and possible
                 actions to run.
         """
 
         self._clear()
 
-        if not error_info:
+        if not report_item_info:
             self.setVisible(False)
             return
 
-        plugin_action_items = error_info["plugin_action_items"]
+        # Mapping of report types to their applicable filters (excluding 'all')
+        filter_mapping = {
+            "error": {"failed", "failedOrWarning"},
+            "warning": {"failedOrWarning"}
+        }
+
+        report_type = report_item_info["report_items"][-1].report_type
+        applicable_filters = filter_mapping.get(report_type, set())
+        # Include 'all' universally
+        applicable_filters.add("all")
+
+        plugin_action_items = report_item_info["plugin_action_items"]
         for plugin_action_item in plugin_action_items:
             if not plugin_action_item.active:
                 continue
 
-            if plugin_action_item.on_filter not in ("failed", "all"):
+            if plugin_action_item.on_filter not in applicable_filters:
                 continue
 
             action_id = plugin_action_item.action_id
@@ -239,16 +251,16 @@ class ValidateActionsWidget(QtWidgets.QFrame):
         self._controller.run_action(plugin_id, action_id)
 
 
-# --- Validation error titles ---
-class ValidationErrorInstanceList(QtWidgets.QListView):
-    """List of publish instances that caused a validation error.
+# --- Validation report items titles ---
+class ValidationReportItemInstanceList(QtWidgets.QListView):
+    """List of publish instances that caused a validation error or warning.
 
-    Instances are collected per plugin's validation error title.
+    Instances are collected per plugin's validation error or warning title.
     """
     def __init__(self, *args, **kwargs):
-        super(ValidationErrorInstanceList, self).__init__(*args, **kwargs)
+        super(ValidationReportItemInstanceList, self).__init__(*args, **kwargs)
 
-        self.setObjectName("ValidationErrorInstanceList")
+        self.setObjectName("ValidationReportItemInstanceList")
 
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
@@ -257,7 +269,7 @@ class ValidationErrorInstanceList(QtWidgets.QListView):
         return self.sizeHint()
 
     def sizeHint(self):
-        result = super(ValidationErrorInstanceList, self).sizeHint()
+        result = super(ValidationReportItemInstanceList, self).sizeHint()
         row_count = self.model().rowCount()
         height = 0
         if row_count > 0:
@@ -266,39 +278,126 @@ class ValidationErrorInstanceList(QtWidgets.QListView):
         return result
 
 
-class ValidationErrorTitleWidget(QtWidgets.QWidget):
-    """Title of validation error.
+class ValidateReportItemIconFrame(QtWidgets.QFrame):
+    """Draw log item icon next to message.
+
+    Todos:
+        Paint event could be slow, maybe we could cache the image into pixmaps
+            so each item does not have to redraw it again.
+    """
+
+    # error_color = QtGui.QColor("#ff4a4a")
+    # warning_color = QtGui.QColor("#ff9500")
+
+    error_color = colors.get("error", None)
+    warning_color = colors.get("warning", None)
+
+    _validation_error_pix = None
+    _validation_warning_pix = None
+
+    def __init__(self, parent, report_type, icon_size):
+        super(ValidateReportItemIconFrame, self).__init__(parent)
+
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+
+        self._report_type = report_type
+        self._icon_size = icon_size
+
+    @classmethod
+    def get_validation_error_icon(cls):
+        if cls._validation_error_pix is None:
+            cls._validation_error_pix = get_pixmap("error")
+        return cls._validation_error_pix
+
+    @classmethod
+    def get_validation_warning_icon(cls):
+        if cls._validation_warning_pix is None:
+            cls._validation_warning_pix = get_pixmap("warning")
+        return cls._validation_warning_pix
+
+    def minimumSizeHint(self):
+        fm = self.fontMetrics()
+        size = fm.height()
+        return QtCore.QSize(size, size)
+
+    def paintEvent(self, event):
+        # Initialize a QPainter for the current widget
+        painter = QtGui.QPainter(self)
+        # Set rendering hints for antialiasing and smooth pixmap transformations
+        painter.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.SmoothPixmapTransform)
+        # Disable drawing of the pen (no outlines will be drawn)
+        painter.setPen(QtCore.Qt.NoPen)
+
+        # Set a default background color (white), used if no icon is drawn
+        color = QtGui.QColor(255, 255, 255)  # white by default
+        painter.setBrush(color)
+
+        # Calculate the internal drawing rectangle, smaller by 1 pixel margin
+        rect = self.rect()
+        new_size = min(rect.width(), rect.height())
+        new_rect = QtCore.QRect(1, 1, new_size - 2, new_size - 2)
+
+        # Determine the icon to use based on log state
+        report_item_icon = None
+        if self._report_type == "error":
+            color = self.error_color
+            report_item_icon = self.get_validation_error_icon()
+        elif self._report_type == "warning":
+            color = self.warning_color
+            report_item_icon = self.get_validation_warning_icon()
+        report_item_icon = change_pixmap_color(report_item_icon, color)
+        # Scale the icon to fit within the new rectangle while maintaining aspect ratio
+        scaled_log_icon = report_item_icon.scaled(new_rect.size(), QtCore.Qt.KeepAspectRatio,
+                                                  QtCore.Qt.SmoothTransformation)
+        painter.drawPixmap(new_rect, scaled_log_icon)
+
+        # Finalize painting by ending the QPainter object
+        painter.end()
+
+
+class ValidationReportItemTitleWidget(QtWidgets.QWidget):
+    """Title of validation error or warning.
 
     Widget is used as radio button so requires clickable functionality and
     changing style on selection/deselection.
 
-    Has toggle button to show/hide instances on which validation error happened
-    if there is a list (Valdation error may happen on context).
+    Has toggle button to show/hide instances on which validation error or warning happened
+    if there is a list (Validation error or warning may happen on context).
     """
 
     selected = QtCore.Signal(str)
     instance_changed = QtCore.Signal(str)
 
-    def __init__(self, title_id, error_info, parent):
-        super(ValidationErrorTitleWidget, self).__init__(parent)
+    def __init__(self, title_id, report_item_info, parent):
+        super(ValidationReportItemTitleWidget, self).__init__(parent)
 
         self._title_id = title_id
-        self._error_info = error_info
+        self._report_item_info = report_item_info
         self._selected = False
 
         title_frame = ClickableFrame(self)
-        title_frame.setObjectName("ValidationErrorTitleFrame")
+        title_frame.setObjectName("ValidationReportItemTitleFrame")
 
         toggle_instance_btn = QtWidgets.QToolButton(title_frame)
         toggle_instance_btn.setObjectName("ArrowBtn")
         toggle_instance_btn.setArrowType(QtCore.Qt.RightArrow)
         toggle_instance_btn.setMaximumWidth(14)
 
-        label_widget = QtWidgets.QLabel(error_info["title"], title_frame)
+        label_widget = QtWidgets.QLabel(report_item_info["title"], title_frame)
 
+        report_type = report_item_info["report_items"][-1].report_type
+
+        # Icon display setup
+        icon_size = 24
+        icon_label = ValidateReportItemIconFrame(self, report_type, icon_size)
+        icon_label.setFixedSize(icon_size, icon_size)
+
+        # Layout configuration
         title_frame_layout = QtWidgets.QHBoxLayout(title_frame)
-        title_frame_layout.addWidget(label_widget, 1)
-        title_frame_layout.addWidget(toggle_instance_btn, 0)
+        title_frame_layout.addWidget(icon_label)  # Icon added here
+        title_frame_layout.addSpacing(10)  # Space between icon and text
+        title_frame_layout.addWidget(label_widget, 1)  # Label takes up remaining space
+        title_frame_layout.addWidget(toggle_instance_btn)  # Button on the far right
 
         instances_model = QtGui.QStandardItemModel()
 
@@ -306,8 +405,8 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
 
         items = []
         context_validation = False
-        for error_item in error_info["error_items"]:
-            context_validation = error_item.context_validation
+        for report_item in report_item_info["report_items"]:
+            context_validation = report_item.context_validation
             if context_validation:
                 toggle_instance_btn.setArrowType(QtCore.Qt.NoArrow)
                 instance_ids.append(CONTEXT_ID)
@@ -315,21 +414,21 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
                 items.append(QtGui.QStandardItem(CONTEXT_LABEL))
                 continue
 
-            label = error_item.instance_label
+            label = report_item.instance_label
             item = QtGui.QStandardItem(label)
             item.setFlags(
                 QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
             )
             item.setData(label, QtCore.Qt.ToolTipRole)
-            item.setData(error_item.instance_id, INSTANCE_ID_ROLE)
+            item.setData(report_item.instance_id, INSTANCE_ID_ROLE)
             items.append(item)
-            instance_ids.append(error_item.instance_id)
+            instance_ids.append(report_item.instance_id)
 
         if items:
             root_item = instances_model.invisibleRootItem()
             root_item.appendRows(items)
 
-        instances_view = ValidationErrorInstanceList(self)
+        instances_view = ValidationReportItemInstanceList(self)
         instances_view.setModel(instances_model)
 
         self.setLayoutDirection(QtCore.Qt.LeftToRight)
@@ -371,7 +470,7 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
         self._expanded = False
 
     def sizeHint(self):
-        result = super(ValidationErrorTitleWidget, self).sizeHint()
+        result = super(ValidationReportItemTitleWidget, self).sizeHint()
         expected_width = max(
             self._view_widget.minimumSizeHint().width(),
             self._view_widget.sizeHint().width()
@@ -487,30 +586,30 @@ class ValidationArtistMessage(QtWidgets.QWidget):
         )
 
 
-class ValidationErrorsView(QtWidgets.QWidget):
+class ValidationReportItemsView(QtWidgets.QWidget):
     selection_changed = QtCore.Signal()
 
     def __init__(self, parent):
-        super(ValidationErrorsView, self).__init__(parent)
+        super(ValidationReportItemsView, self).__init__(parent)
 
-        errors_scroll = VerticalScrollArea(self)
-        errors_scroll.setWidgetResizable(True)
+        report_items_scroll = VerticalScrollArea(self)
+        report_items_scroll.setWidgetResizable(True)
 
-        errors_widget = QtWidgets.QWidget(errors_scroll)
-        errors_widget.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+        report_items_widget = QtWidgets.QWidget(report_items_scroll)
+        report_items_widget.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        errors_scroll.setWidget(errors_widget)
+        report_items_scroll.setWidget(report_items_widget)
 
-        errors_layout = QtWidgets.QVBoxLayout(errors_widget)
+        report_items_layout = QtWidgets.QVBoxLayout(report_items_widget)
         # Add 5 margin to left so the is not directly on the edge of the
         #   scroll widget
-        errors_layout.setContentsMargins(5, 0, 0, 0)
+        report_items_layout.setContentsMargins(5, 0, 0, 0)
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(errors_scroll, 1)
+        layout.addWidget(report_items_scroll, 1)
 
-        self._errors_widget = errors_widget
-        self._errors_layout = errors_layout
+        self._report_items_widget = report_items_widget
+        self._report_items_layout = report_items_layout
         self._title_widgets = {}
         self._previous_select = None
 
@@ -519,35 +618,35 @@ class ValidationErrorsView(QtWidgets.QWidget):
 
         self._title_widgets = {}
         self._previous_select = None
-        while self._errors_layout.count():
-            item = self._errors_layout.takeAt(0)
+        while self._report_items_layout.count():
+            item = self._report_items_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-    def set_errors(self, grouped_error_items):
-        """Set errors into context and created titles.
+    def set_report_items(self, grouped_report_items):
+        """Set report items into context and created titles.
 
         Args:
-            validation_error_report (PublishValidationErrorsReport): Report
-                with information about validation errors and publish plugin
+            grouped_report_items (PublishValidationReportItems): Report
+                with information about validation errors or warnings and publish plugin
                 actions.
         """
 
         self._clear()
 
         first_id = None
-        for title_item in grouped_error_items:
+        for title_item in grouped_report_items:
             title_id = title_item["id"]
             if first_id is None:
                 first_id = title_id
-            widget = ValidationErrorTitleWidget(title_id, title_item, self)
+            widget = ValidationReportItemTitleWidget(title_id, title_item, self)
             widget.selected.connect(self._on_select)
             widget.instance_changed.connect(self._on_instance_change)
-            self._errors_layout.addWidget(widget)
+            self._report_items_layout.addWidget(widget)
             self._title_widgets[title_id] = widget
 
-        self._errors_layout.addStretch(1)
+        self._report_items_layout.addStretch(1)
 
         if first_id:
             self._title_widgets[first_id].set_selected(True)
@@ -870,7 +969,7 @@ class PublishInstanceCardWidget(BaseClickableFrame):
 
 
 class PublishInstancesViewWidget(QtWidgets.QWidget):
-    # Sane minimum width of instance cards - size calulated using font metrics
+    # Sane minimum width of instance cards - size calculated using font metrics
     _min_width_measure_string = 24 * "O"
     selection_changed = QtCore.Signal()
 
@@ -973,6 +1072,7 @@ class PublishInstancesViewWidget(QtWidgets.QWidget):
         publish_finished = (
             self._controller.publish_has_crashed
             or self._controller.publish_has_validation_errors
+            or self._controller.publish_has_validation_warnings
             or self._controller.publish_has_finished
         )
         instances_by_family = collections.defaultdict(list)
@@ -1027,8 +1127,8 @@ class LogIconFrame(QtWidgets.QFrame):
             so each item does not have to redraw it again.
     """
 
-    info_color = QtGui.QColor("#ffffff")
-    error_color = QtGui.QColor("#ff4a4a")
+    info_color = colors.get("info", False)
+    error_color = colors.get("error", False)
     level_to_color = dict((
         (10, QtGui.QColor("#ff66e8")),
         (20, QtGui.QColor("#66abff")),
@@ -1038,22 +1138,38 @@ class LogIconFrame(QtWidgets.QFrame):
     ))
     _error_pix = None
     _validation_error_pix = None
+    _validation_warning_pix = None
+    _validation_info_pix = None
 
-    def __init__(self, parent, log_type, log_level, is_validation_error):
+    def __init__(self, parent, log, log_level):
         super(LogIconFrame, self).__init__(parent)
 
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self._is_record = log_type == "record"
-        self._is_error = log_type == "error"
-        self._is_validation_error = bool(is_validation_error)
+        self._is_record = log["type"] == "record"
+        self._is_error = log["type"] == "error"
+        self._is_validation_error = bool(log.get("is_validation_error", False))
+        self._is_warning = bool(log.get("is_warning", False))
+        self._is_info = bool(log.get("is_info", False))
         self._log_color = self.level_to_color.get(log_level)
 
     @classmethod
     def get_validation_error_icon(cls):
         if cls._validation_error_pix is None:
-            cls._validation_error_pix = get_pixmap("warning")
+            cls._validation_error_pix = get_pixmap("error")
         return cls._validation_error_pix
+
+    @classmethod
+    def get_validation_warning_icon(cls):
+        if cls._validation_warning_pix is None:
+            cls._validation_warning_pix = get_pixmap("warning")
+        return cls._validation_warning_pix
+
+    @classmethod
+    def get_validation_info_icon(cls):
+        if cls._validation_info_pix is None:
+            cls._validation_info_pix = get_pixmap("checked")
+        return cls._validation_info_pix
 
     @classmethod
     def get_error_icon(cls):
@@ -1067,35 +1183,69 @@ class LogIconFrame(QtWidgets.QFrame):
         return QtCore.QSize(size, size)
 
     def paintEvent(self, event):
+        # Initialize a QPainter for the current widget
         painter = QtGui.QPainter(self)
+        # Set rendering hints for antialiasing and smooth pixmap transformations
         painter.setRenderHints(
             QtGui.QPainter.Antialiasing
             | QtGui.QPainter.SmoothPixmapTransform
         )
+        # Disable drawing of the pen (no outlines will be drawn)
         painter.setPen(QtCore.Qt.NoPen)
+
+        # Set a default background color (white), used if no icon is drawn
+        color = colors.get("info", False)  # white by default
+        painter.setBrush(color)
+
+        # Calculate the internal drawing rectangle, smaller by 1 pixel margin
         rect = self.rect()
         new_size = min(rect.width(), rect.height())
         new_rect = QtCore.QRect(1, 1, new_size - 2, new_size - 2)
-        if self._is_error:
-            if self._is_validation_error:
-                error_icon = self.get_validation_error_icon()
-            else:
-                error_icon = self.get_error_icon()
-            scaled_error_icon = error_icon.scaled(
-                new_rect.size(),
-                QtCore.Qt.KeepAspectRatio,
-                QtCore.Qt.SmoothTransformation
-            )
-            painter.drawPixmap(new_rect, scaled_error_icon)
 
-        else:
-            if self._is_record:
-                color = self._log_color
+        # Determine the icon to use based on log state
+        log_icon = None
+        if self._is_error:
+            color = self.error_color
+            if self._is_validation_error:
+                log_icon = self.get_validation_error_icon()
             else:
-                color = QtGui.QColor(255, 255, 255)
+                log_icon = self.get_error_icon()
+        elif self._is_record:
+            color = self._log_color
+            if self._is_warning:
+                log_icon = self.get_validation_warning_icon()
+            elif self._is_info:
+                log_icon = self.get_validation_info_icon()
+            # Update the brush color only if it's a record log and not an error
+        # Draw the icon or an ellipse if no icon is present
+        if log_icon:
+            log_icon = change_pixmap_color(log_icon, color)
+            # Scale the icon to fit within the new rectangle while maintaining aspect ratio
+            scaled_log_icon = log_icon.scaled(new_rect.size(), QtCore.Qt.KeepAspectRatio,
+                                              QtCore.Qt.SmoothTransformation)
+            painter.drawPixmap(new_rect, scaled_log_icon)
+        else:
+            # Apply the brush color only if there's no icon, then draw an ellipse
             painter.setBrush(color)
             painter.drawEllipse(new_rect)
+
+        # Finalize painting by ending the QPainter object
         painter.end()
+
+
+def change_pixmap_color(pixmap, new_color):
+    from qtpy.QtGui import QPixmap, QPainter, QColor, QIcon
+
+    colored_pixmap = QPixmap(pixmap.size())
+    colored_pixmap.fill(QtCore.Qt.transparent)
+
+    painter = QPainter(colored_pixmap)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+    painter.fillRect(colored_pixmap.rect(), new_color)
+    painter.end()
+
+    return colored_pixmap
 
 
 class LogItemWidget(QtWidgets.QWidget):
@@ -1112,7 +1262,7 @@ class LogItemWidget(QtWidgets.QWidget):
 
         type_flag, level_n = self._get_log_info(log)
         icon_label = LogIconFrame(
-            self, log["type"], level_n, log.get("is_validation_error"))
+            self, log, level_n)
         message_label = QtWidgets.QLabel(log["msg"].rstrip(), self)
         message_label.setObjectName("PublishLogMessage")
         message_label.setTextInteractionFlags(
@@ -1575,7 +1725,7 @@ class ErrorDetailsWidget(QtWidgets.QWidget):
         self._error_details_input.setVisible(
             not self._error_details_expand_btn.collapsed)
 
-    def set_error_item(self, error_item):
+    def set_validation_report_item(self, error_item):
         detail = ""
         description = ""
         if error_item:
@@ -1632,7 +1782,7 @@ class ReportsWidget(QtWidgets.QWidget):
 
         instances_view = PublishInstancesViewWidget(controller, views_widget)
 
-        validation_error_view = ValidationErrorsView(views_widget)
+        validation_error_view = ValidationReportItemsView(views_widget)
 
         views_layout = QtWidgets.QStackedLayout(views_widget)
         views_layout.setContentsMargins(0, 0, 0, 0)
@@ -1696,11 +1846,11 @@ class ReportsWidget(QtWidgets.QWidget):
 
         instances_view.selection_changed.connect(self._on_instance_selection)
         validation_error_view.selection_changed.connect(
-            self._on_error_selection)
+            self._on_report_item_selection)
 
         self._views_layout = views_layout
         self._instances_view = instances_view
-        self._validation_error_view = validation_error_view
+        self._validation_report_item_view = validation_error_view
 
         self._actions_widget = actions_widget
         self._detail_inputs_widget = detail_inputs_widget
@@ -1711,7 +1861,7 @@ class ReportsWidget(QtWidgets.QWidget):
 
         self._controller = controller
 
-        self._validation_errors_by_id = {}
+        self._validation_report_items_by_id = {}
 
     def _get_instance_items(self):
         report = self._controller.get_publish_report()
@@ -1742,17 +1892,18 @@ class ReportsWidget(QtWidgets.QWidget):
 
     def update_data(self):
         view = self._instances_view
-        validation_error_mode = False
+        validation_report_mode = False
         if (
             not self._controller.publish_has_crashed
-            and self._controller.publish_has_validation_errors
+            and (self._controller.publish_has_validation_errors
+                 or self._controller.publish_has_validation_warnings)
         ):
-            view = self._validation_error_view
-            validation_error_mode = True
+            view = self._validation_report_item_view
+            validation_report_mode = True
 
-        self._actions_widget.set_visible_mode(validation_error_mode)
-        self._detail_inputs_spacer.setVisible(validation_error_mode)
-        self._detail_input_scroll.setVisible(validation_error_mode)
+        self._actions_widget.set_visible_mode(validation_report_mode)
+        self._detail_inputs_spacer.setVisible(validation_report_mode)
+        self._detail_input_scroll.setVisible(validation_report_mode)
         self._views_layout.setCurrentWidget(view)
 
         self._crash_widget.setVisible(self._controller.publish_has_crashed)
@@ -1763,59 +1914,59 @@ class ReportsWidget(QtWidgets.QWidget):
         self._instances_view.update_instances(instance_items)
         self._logs_view.update_instances(instance_items)
 
-        # Validation errors
-        validation_errors = self._controller.get_validation_errors()
-        grouped_error_items = validation_errors.group_items_by_title()
+        # Validation report items
+        validation_report_items = self._controller.get_validation_report_items()
+        grouped_validation_report_items = validation_report_items.group_items_by_title()
 
-        validation_errors_by_id = {
+        validation_report_items_by_id = {
             title_item["id"]: title_item
-            for title_item in grouped_error_items
+            for title_item in grouped_validation_report_items
         }
 
-        self._validation_errors_by_id = validation_errors_by_id
-        self._validation_error_view.set_errors(grouped_error_items)
+        self._validation_report_items_by_id = validation_report_items_by_id
+        self._validation_report_item_view.set_report_items(grouped_validation_report_items)
 
     def _on_instance_selection(self):
         instance_ids = self._instances_view.get_selected_instance_ids()
         self._logs_view.set_instances_filter(instance_ids)
 
-    def _on_error_selection(self):
+    def _on_report_item_selection(self):
         title_id, instance_ids = (
-            self._validation_error_view.get_selected_items())
-        error_info = self._validation_errors_by_id.get(title_id)
-        if error_info is None:
-            self._actions_widget.set_error_info(None)
-            self._detail_inputs_widget.set_error_item(None)
+            self._validation_report_item_view.get_selected_items())
+        report_item_info = self._validation_report_items_by_id.get(title_id)
+        if report_item_info is None:
+            self._actions_widget.set_report_item_info(None)
+            self._detail_inputs_widget.set_validation_report_item(None)
             return
 
         self._logs_view.set_instances_filter(instance_ids)
-        self._logs_view.set_plugins_filter([error_info["plugin_id"]])
+        self._logs_view.set_plugins_filter([report_item_info["plugin_id"]])
 
-        match_error_item = None
-        for error_item in error_info["error_items"]:
-            instance_id = error_item.instance_id or CONTEXT_ID
+        match_validation_report_item = None
+        for report_item in report_item_info["report_items"]:
+            instance_id = report_item.instance_id or CONTEXT_ID
             if instance_id in instance_ids:
-                match_error_item = error_item
+                match_validation_report_item = report_item
                 break
 
-        self._actions_widget.set_error_info(error_info)
-        self._detail_inputs_widget.set_error_item(match_error_item)
+        self._actions_widget.set_report_item_info(report_item_info)
+        self._detail_inputs_widget.set_validation_report_item(match_validation_report_item)
 
 
 class ReportPageWidget(QtWidgets.QFrame):
-    """Widgets showing report for artis.
+    """Widgets showing report for artists.
 
     There are 5 possible states:
     1. Publishing did not start yet.         > Only label.
     2. Publishing is paused.                ┐
     3. Publishing successfully finished.    │> Instances with logs.
     4. Publishing crashed.                  ┘
-    5. Crashed because of validation error.  > Errors with logs.
+    5. Crashed because of validation error or warning.  > Errors or warnings with logs.
 
-    This widget is shown if validation errors happened during validation part.
+    This widget is shown if validation errors or warnings happened during validation part.
 
-    Shows validation error titles with instances on which they happened
-    and validation error detail with possible actions (repair).
+    Shows validation error or warning titles with instances on which they happened
+    and validation error or warning detail with possible actions (repair).
     """
 
     def __init__(self, controller, parent):
@@ -1853,7 +2004,7 @@ class ReportPageWidget(QtWidgets.QFrame):
             header_label = "Nothing to report until you run publish"
         elif self._controller.publish_has_crashed:
             header_label = "Publish error report"
-        elif self._controller.publish_has_validation_errors:
+        elif self._controller.publish_has_validation_errors or self._controller.publish_has_validation_warnings:
             header_label = "Publish validation report"
         elif self._controller.publish_has_finished:
             header_label = "Publish success report"

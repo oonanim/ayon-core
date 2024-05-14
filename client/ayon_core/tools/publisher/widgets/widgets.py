@@ -251,6 +251,14 @@ class ValidateBtn(PublishIconBtn):
         self.setToolTip("Validate")
 
 
+class IgnoreBtn(PublishIconBtn):
+    """Publish start publish button."""
+    def __init__(self, parent=None):
+        icon_path = get_icon_path("play")
+        super(IgnoreBtn, self).__init__(icon_path, "Ignore Warnings", parent)
+        self.setToolTip("Ignore warnings and resume validation")
+
+
 class PublishBtn(PublishIconBtn):
     """Publish start publish button."""
     def __init__(self, parent=None):

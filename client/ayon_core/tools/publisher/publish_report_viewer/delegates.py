@@ -2,6 +2,7 @@ import collections
 from qtpy import QtWidgets, QtCore, QtGui
 from .constants import (
     ITEM_IS_GROUP_ROLE,
+    ITEM_WARNED_ROLE,
     ITEM_ERRORED_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
@@ -9,7 +10,8 @@ from .constants import (
 )
 
 colors = {
-    "error": QtGui.QColor("#ff4a4a"),
+    "info": QtGui.QColor("#ffffff"),
+    "error": QtGui.QColor("#fc565b"),
     "warning": QtGui.QColor("#ff9900"),
     "ok": QtGui.QColor("#77AE24"),
     "active": QtGui.QColor("#99CEEE"),
@@ -118,8 +120,8 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
     @classmethod
     def _get_icon_color(cls, name):
-        if name == "error":
-            return QtGui.QColor(colors["error"])
+        if name == "error" or "warning":
+            return QtGui.QColor(colors[name])
         return QtGui.QColor(QtCore.Qt.white)
 
     @classmethod
@@ -139,6 +141,11 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         draw_ellipse = True
         if name == "error":
             color = QtGui.QColor(colors["error"])
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(color)
+
+        elif name == "warning":
+            color = QtGui.QColor(colors["warning"])
             painter.setPen(QtCore.Qt.NoPen)
             painter.setBrush(color)
 
@@ -223,6 +230,8 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         icon_size = expander_rect.height()
         if index.data(ITEM_ERRORED_ROLE):
             expander_icon = self._get_icon("error", icon_size)
+        elif index.data(ITEM_WARNED_ROLE):
+            expander_icon = self._get_icon("warning", icon_size)
         elif index.data(PLUGIN_SKIPPED_ROLE):
             expander_icon = self._get_icon("skipped", icon_size)
         elif index.data(PLUGIN_PASSED_ROLE):

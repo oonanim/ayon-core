@@ -5,6 +5,7 @@ from .widgets import (
     ResetBtn,
     ValidateBtn,
     PublishBtn,
+    IgnoreBtn,
     PublishReportBtn,
 )
 
@@ -35,7 +36,7 @@ class PublishFrame(QtWidgets.QWidget):
         super(PublishFrame, self).__init__(parent)
 
         # Bottom part of widget where process and callback buttons are showed
-        # - QFrame used to be able set background using stylesheets easily
+        # - QFrame used to be able to set background using stylesheets easily
         #   and not override all children widgets style
         content_frame = QtWidgets.QFrame(self)
         content_frame.setObjectName("PublishInfoFrame")
@@ -107,6 +108,7 @@ class PublishFrame(QtWidgets.QWidget):
         reset_btn = ResetBtn(footer_widget)
         stop_btn = StopBtn(footer_widget)
         validate_btn = ValidateBtn(footer_widget)
+        ignore_btn = IgnoreBtn(footer_widget)
         publish_btn = PublishBtn(footer_widget)
 
         report_btn.add_action("Go to details", "go_to_report")
@@ -121,6 +123,7 @@ class PublishFrame(QtWidgets.QWidget):
         footer_layout.addWidget(reset_btn, 0)
         footer_layout.addWidget(stop_btn, 0)
         footer_layout.addWidget(validate_btn, 0)
+        footer_layout.addWidget(ignore_btn, 0)
         footer_layout.addWidget(publish_btn, 0)
 
         # Info frame content
@@ -152,6 +155,7 @@ class PublishFrame(QtWidgets.QWidget):
         reset_btn.clicked.connect(self._on_reset_clicked)
         stop_btn.clicked.connect(self._on_stop_clicked)
         validate_btn.clicked.connect(self._on_validate_clicked)
+        ignore_btn.clicked.connect(self._on_ignore_warnings_clicked)
         publish_btn.clicked.connect(self._on_publish_clicked)
 
         shrunk_anim.valueChanged.connect(self._on_shrunk_anim)
@@ -199,6 +203,7 @@ class PublishFrame(QtWidgets.QWidget):
         self._reset_btn = reset_btn
         self._stop_btn = stop_btn
         self._validate_btn = validate_btn
+        self._ignore_btn = ignore_btn
         self._publish_btn = publish_btn
 
         self._shrunken = False
@@ -312,6 +317,7 @@ class PublishFrame(QtWidgets.QWidget):
         self._reset_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
         self._validate_btn.setEnabled(True)
+        self._ignore_btn.setEnabled(False)
         self._publish_btn.setEnabled(True)
 
         self._progress_bar.setValue(self._controller.publish_progress)
@@ -324,7 +330,7 @@ class PublishFrame(QtWidgets.QWidget):
         if self._last_instance_label:
             self._instance_label.setText(self._last_instance_label)
 
-        self._set_success_property(3)
+        self._set_success_property(4)
         self._set_progress_visibility(True)
         self._set_main_label("Publishing...")
         self._message_label_top.setText("")
@@ -332,6 +338,7 @@ class PublishFrame(QtWidgets.QWidget):
         self._reset_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
         self._validate_btn.setEnabled(False)
+        self._ignore_btn.setEnabled(False)
         self._publish_btn.setEnabled(False)
 
         self.set_shrunk_state(False)
@@ -356,6 +363,8 @@ class PublishFrame(QtWidgets.QWidget):
         QtWidgets.QApplication.processEvents()
 
     def _on_publish_stop(self):
+
+        # Update UI elements based on the publishing state
         self._progress_bar.setValue(self._controller.publish_progress)
 
         self._reset_btn.setEnabled(True)
@@ -364,33 +373,34 @@ class PublishFrame(QtWidgets.QWidget):
         self._instance_label.setText("")
         self._plugin_label.setText("")
 
-        validate_enabled = not self._controller.publish_has_crashed
-        publish_enabled = not self._controller.publish_has_crashed
-        if validate_enabled:
-            validate_enabled = not self._controller.publish_has_validated
-        if publish_enabled:
-            if (
-                self._controller.publish_has_validated
-                and self._controller.publish_has_validation_errors
-            ):
-                publish_enabled = False
+        # Determine UI control states based on the controller's state
+        has_crashed = self._controller.publish_has_crashed
+        has_validated = self._controller.publish_has_validated
+        has_errors = self._controller.publish_has_validation_errors
+        has_warnings = self._controller.publish_has_validation_warnings
+        has_finished = self._controller.publish_has_finished
 
-            else:
-                publish_enabled = not self._controller.publish_has_finished
+        # Set button enabled states and visibility
+        enabled_state = not has_crashed
+        self._validate_btn.setEnabled(enabled_state and not has_validated)
+        self._publish_btn.setEnabled(enabled_state and not has_finished)
+        self._ignore_btn.setEnabled(enabled_state and has_warnings)
 
-        self._validate_btn.setEnabled(validate_enabled)
-        self._publish_btn.setEnabled(publish_enabled)
+        self._validate_btn.setVisible(has_validated and not (has_errors or has_warnings))
+        self._publish_btn.setVisible(has_validated and not (has_errors or has_warnings))
+        self._ignore_btn.setVisible(has_warnings and not has_errors)
 
-        if self._controller.publish_has_crashed:
+        # Handle various states
+        if has_crashed:
             self._set_error_msg()
-
-        elif self._controller.publish_has_validation_errors:
+        elif has_errors:
             self._set_progress_visibility(False)
             self._set_validation_errors()
-
-        elif self._controller.publish_has_finished:
+        elif has_warnings:
+            self._set_progress_visibility(False)
+            self._set_validation_warnings()
+        elif has_finished:
             self._set_finished()
-
         else:
             self._set_stopped()
 
@@ -404,7 +414,7 @@ class PublishFrame(QtWidgets.QWidget):
             "Hit publish (play button) to continue."
         )
 
-        self._set_success_property(4)
+        self._set_success_property(5)
 
     def _set_error_msg(self):
         """Show error message to artist on publish crash."""
@@ -419,6 +429,12 @@ class PublishFrame(QtWidgets.QWidget):
         self._set_main_label("Your publish didn't pass studio validations")
         self._message_label_top.setText("Check results above please")
         self._set_success_property(2)
+
+    def _set_validation_warnings(self):
+        self._set_main_label("Your publish has passed studio validations with warnings.")
+        self._message_label_top.setText(
+            "Please review the warnings above and decide whether to address or ignore them.")
+        self._set_success_property(3)
 
     def _set_finished(self):
         self._set_main_label("Finished")
@@ -449,10 +465,11 @@ class PublishFrame(QtWidgets.QWidget):
         State enum:
         - None - Default state after restart
         - 0 - Success finish
-        - 1 - Error happened
+        - 1 - Crash happened
         - 2 - Validation error
-        - 3 - In progress
-        - 4 - Stopped/Paused
+        - 3 - Validation warning
+        - 4 - In progress
+        - 5 - Stopped/Paused
         """
 
         if state is None:
@@ -485,6 +502,9 @@ class PublishFrame(QtWidgets.QWidget):
 
     def _on_validate_clicked(self):
         self._controller.validate()
+
+    def _on_ignore_warnings_clicked(self):
+        self._controller.ignore_warnings()
 
     def _on_publish_clicked(self):
         self._controller.publish()
