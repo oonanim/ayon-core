@@ -282,12 +282,18 @@ class PublishReportMaker:
             except Exception:
                 msg = str(record.msg)
 
-            is_warning = record.levelno >= 30
+            is_debug = record.levelno == logging.DEBUG
             is_info = record.levelno == logging.INFO
+            is_warning = record.levelno == logging.WARNING
+            is_error = record.levelno == logging.ERROR
+            is_critical = record.levelno == logging.CRITICAL
             output.append({
                 "type": "record",
-                "is_warning": is_warning,
+                "is_debug": is_debug,
                 "is_info": is_info,
+                "is_warning": is_warning,
+                "is_error": is_error,
+                "is_critical": is_critical,
                 "msg": msg,
                 "name": record.name,
                 "lineno": record.lineno,
@@ -315,9 +321,11 @@ class PublishReportMaker:
 
             # Action result does not have 'is_validation_error'
             is_validation_error = result.get("is_validation_error", False)
+            is_validation_warning = result.get("is_validation_warning", False)
             output.append({
                 "type": "error",
                 "is_validation_error": is_validation_error,
+                "is_validation_warning": is_validation_warning,
                 "msg": msg,
                 "filename": str(fname),
                 "lineno": str(line_no),
@@ -2569,7 +2577,7 @@ class PublisherController(BasePublisherController):
             result["instance"]
         )
 
-    def _add_validation_warning(self, result, warning_message):
+    def _add_validation_warning(self, result):
         """Add a validation warning to the publishing results.
 
         Args:
@@ -2583,10 +2591,10 @@ class PublisherController(BasePublisherController):
         self.publish_has_validation_warnings = True
 
         # Create a PublishValidationWarning object and add it to the errors list
-        warning = PublishValidationWarning(warning_message)
+        # warning = PublishValidationWarning(warning_message)
         self._publish_validation_report_items.add_validation_report_item(
             result["plugin"],
-            warning,
+            result["error"],
             result["instance"]
         )
 
@@ -2594,20 +2602,26 @@ class PublisherController(BasePublisherController):
         result = pyblish.plugin.process(
             plugin, self._publish_context, instance
         )
-
+        print(f'{plugin.label} = {result}')
         self._publish_plugins_proxy.get_plugin_actions(plugin)
 
         # Errors handling and reports
         exception = result.get("error")
         if exception:
             has_validation_error = False
+            has_validation_warning = False
             if (
                 isinstance(exception, PublishValidationError)
                 and not self.publish_has_validated
             ):
                 has_validation_error = True
                 self._add_validation_error(result)
-
+            elif (
+                isinstance(exception, PublishValidationWarning)
+                and not self.publish_has_validated
+            ):
+                has_validation_warning = True
+                self._add_validation_warning(result)
             else:
                 if isinstance(exception, KnownPublishError):
                     msg = str(exception)
@@ -2620,12 +2634,7 @@ class PublisherController(BasePublisherController):
                 self.publish_has_crashed = True
 
             result["is_validation_error"] = has_validation_error
-
-        warnings = [record for record in result.get('records') if record.levelno >= 30]
-        if warnings and not exception:
-            main_warning = warnings[-1] if warnings else None
-            warning_message = main_warning.message
-            self._add_validation_warning(result, warning_message)
+            result["is_validation_warning"] = has_validation_warning
 
         self._publish_report.add_result(result)
 
