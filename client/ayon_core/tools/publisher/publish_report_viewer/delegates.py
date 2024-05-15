@@ -10,9 +10,8 @@ from .constants import (
 )
 
 colors = {
-    "info": QtGui.QColor("#ffffff"),
     "error": QtGui.QColor("#fc565b"),
-    "warning": QtGui.QColor("#ff9900"),
+    "warning": QtGui.QColor("#FFBA66"),
     "ok": QtGui.QColor("#77AE24"),
     "active": QtGui.QColor("#99CEEE"),
     "idle": QtCore.Qt.white,
