@@ -1211,26 +1211,7 @@ class LogIconFrame(QtWidgets.QFrame):
         new_rect = QtCore.QRect(1, 1, new_size - 2, new_size - 2)
 
         # Determine the icon to use based on log state
-
-        log_icon = None
-        if self._is_error:
-            if self._is_validation_error:
-                color = self.error_color
-                log_icon = self.get_validation_error_icon()
-            elif self._is_validation_warning:
-                color = self.warning_color
-                log_icon = self.get_validation_warning_icon()
-            else:
-                log_icon = self.get_error_icon()
-
-        elif self._is_record:
-            color = self._log_color
-            if self._is_log_info:
-                log_icon = self.get_validation_info_icon()
-            elif self._is_log_warning:
-                log_icon = self.get_validation_warning_icon()
-            elif self._is_log_error:
-                log_icon = self.get_validation_error_icon()
+        log_icon, color = self._determine_icon_and_color()
 
         # Draw the icon or an ellipse if no icon is present
         if log_icon:
@@ -1246,6 +1227,44 @@ class LogIconFrame(QtWidgets.QFrame):
 
         # Finalize painting by ending the QPainter object
         painter.end()
+
+    def _determine_icon_and_color(self):
+        """
+        Determines the appropriate icon and color based on the current log state.
+
+        This method checks various flags set on the object to decide which icon and
+        what color should be used for rendering. The method is designed to handle different
+        types of log states such as errors and records. Each state has subcategories
+        that further specify the exact icon and color to use.
+
+        Returns:
+            tuple: A tuple containing the icon (QPixmap) and the color (QColor) to be used.
+        """
+        # Default color is white
+        log_icon, color = None, QtGui.QColor("#ffffff")
+
+        # Handling different types of error states
+        if self._is_error:
+            if self._is_validation_error:
+                color = self.error_color  # Use specific error color
+                log_icon = self.get_validation_error_icon()
+            elif self._is_validation_warning:
+                color = self.warning_color  # Use specific warning color
+                log_icon = self.get_validation_warning_icon()
+            else:
+                log_icon = self.get_error_icon()  # Use generic error icon
+
+        # Handling different types of record states
+        elif self._is_record:
+            color = self._log_color  # Use log-specific color
+            if self._is_log_info:
+                log_icon = self.get_validation_info_icon()
+            elif self._is_log_warning:
+                log_icon = self.get_validation_warning_icon()
+            elif self._is_log_error:
+                log_icon = self.get_validation_error_icon()
+
+        return log_icon, color
 
 
 def change_pixmap_color(pixmap, new_color):
