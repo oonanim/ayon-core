@@ -25,48 +25,40 @@ class AbstractMetaContextPlugin(ABCMeta, ExplicitMetaPlugin):
     pass
 
 
-class PublishValidationError(Exception):
-    """Validation error happened during publishing.
+class PublishValidationReportItem(Exception):
+    """Validation error or warning occurred during publishing.
 
-    This exception should be used when validation publishing failed.
+    Base class for reporting publishing failures or warnings.
 
     Has additional UI specific attributes that may be handy for artist.
 
     Args:
-        message(str): Message of error. Short explanation an issue.
-        title(str): Title showed in UI. All instances are grouped under
-            single title.
-        description(str): Detailed description of an error. It is possible
-            to use Markdown syntax.
+        message (str): Short explanation of the issue.
+        title (str): Title displayed in UI. Instances are grouped under this title.
+        description (str): Detailed description of the issue. Markdown syntax is allowed.
+        detail (str): Any further details about the issue.
     """
-
     def __init__(self, message, title=None, description=None, detail=None):
+        super(PublishValidationReportItem, self).__init__(message)
         self.message = message
         self.title = title
         self.description = description or message
         self.detail = detail
+
+
+class PublishValidationError(PublishValidationReportItem):
+    """Specific class for validation errors during publishing."""
+
+    def __init__(self, message, title=None, description=None, detail=None):
+        super(PublishValidationError, self).__init__(message, title, description, detail)
         self.report_type = "error"
-        super(PublishValidationError, self).__init__(message)
 
 
-class PublishValidationWarning:
-    """Validation warning happened during publishing.
-
-    Has additional UI specific attributes that may be handy for artist.
-
-    Args:
-        message(str): Message of error. Short explanation an issue.
-        title(str): Title showed in UI. All instances are grouped under
-            single title.
-        description(str): Detailed description of an error. It is possible
-            to use Markdown syntax.
-    """
+class PublishValidationWarning(PublishValidationReportItem):
+    """Specific class for validation warnings during publishing."""
 
     def __init__(self, message, title=None, description=None, detail=None):
-        self.message = message
-        self.title = title
-        self.description = description or message
-        self.detail = detail
+        super(PublishValidationWarning, self).__init__(message, title, description, detail)
         self.report_type = "warning"
 
 
