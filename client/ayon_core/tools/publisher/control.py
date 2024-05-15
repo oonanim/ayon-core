@@ -2680,7 +2680,6 @@ class PublisherController(BasePublisherController):
         result = pyblish.plugin.process(
             plugin, self._publish_context, instance
         )
-        print(f'{plugin.label} = {result}')
         self._publish_plugins_proxy.get_plugin_actions(plugin)
 
         # Errors handling and reports
