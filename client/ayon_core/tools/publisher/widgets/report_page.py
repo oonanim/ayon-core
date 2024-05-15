@@ -1127,7 +1127,8 @@ class LogIconFrame(QtWidgets.QFrame):
             so each item does not have to redraw it again.
     """
 
-    info_color = colors.get("info", False)
+    info_color = QtGui.QColor("#ff66e8")
+    warning_color = colors.get("warning", False)
     error_color = colors.get("error", False)
     level_to_color = dict((
         (10, QtGui.QColor("#ff66e8")),
@@ -1148,9 +1149,16 @@ class LogIconFrame(QtWidgets.QFrame):
 
         self._is_record = log["type"] == "record"
         self._is_error = log["type"] == "error"
+
         self._is_validation_error = bool(log.get("is_validation_error", False))
-        self._is_warning = bool(log.get("is_warning", False))
-        self._is_info = bool(log.get("is_info", False))
+        self._is_validation_warning = bool(log.get("is_validation_warning", False))
+
+        self._is_log_debug = bool(log.get("is_debug", False))
+        self._is_log_info = bool(log.get("is_info", False))
+        self._is_log_warning = bool(log.get("is_warning", False))
+        self._is_log_error = bool(log.get("is_error", False))
+        self._is_log_critical = bool(log.get("is_critical", False))
+
         self._log_color = self.level_to_color.get(log_level)
 
     @classmethod
@@ -1194,7 +1202,7 @@ class LogIconFrame(QtWidgets.QFrame):
         painter.setPen(QtCore.Qt.NoPen)
 
         # Set a default background color (white), used if no icon is drawn
-        color = colors.get("info", False)  # white by default
+        color = QtGui.QColor("#ffffff")  # white by default
         painter.setBrush(color)
 
         # Calculate the internal drawing rectangle, smaller by 1 pixel margin
@@ -1203,20 +1211,27 @@ class LogIconFrame(QtWidgets.QFrame):
         new_rect = QtCore.QRect(1, 1, new_size - 2, new_size - 2)
 
         # Determine the icon to use based on log state
+
         log_icon = None
         if self._is_error:
-            color = self.error_color
             if self._is_validation_error:
+                color = self.error_color
                 log_icon = self.get_validation_error_icon()
+            elif self._is_validation_warning:
+                color = self.warning_color
+                log_icon = self.get_validation_warning_icon()
             else:
                 log_icon = self.get_error_icon()
+
         elif self._is_record:
             color = self._log_color
-            if self._is_warning:
-                log_icon = self.get_validation_warning_icon()
-            elif self._is_info:
+            if self._is_log_info:
                 log_icon = self.get_validation_info_icon()
-            # Update the brush color only if it's a record log and not an error
+            elif self._is_log_warning:
+                log_icon = self.get_validation_warning_icon()
+            elif self._is_log_error:
+                log_icon = self.get_validation_error_icon()
+
         # Draw the icon or an ellipse if no icon is present
         if log_icon:
             log_icon = change_pixmap_color(log_icon, color)
