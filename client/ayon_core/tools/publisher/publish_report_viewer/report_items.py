@@ -39,13 +39,16 @@ class InstanceItem:
         self.removed = not instance_data.get("exists", True)
 
         logs = logs_by_instance_id.get(instance_id) or []
-        errored = False
+        errored, warned = False, False
         for log_item in logs:
             if log_item.errored:
                 errored = True
                 break
+            elif log_item.warned:
+                warned = True
 
         self.errored = errored
+        self.warned = warned
 
     @property
     def id(self):
@@ -56,7 +59,8 @@ class LogItem:
     def __init__(self, log_item_data, plugin_id, instance_id):
         self._instance_id = instance_id
         self._plugin_id = plugin_id
-        self._errored = log_item_data["type"] == "error"
+        self._errored = log_item_data["type"] == "error" and log_item_data.get("is_validation_error", True)
+        self._warned = log_item_data.get("is_validation_warning", False)
         self.data = log_item_data
 
     def __getitem__(self, key):
@@ -65,6 +69,10 @@ class LogItem:
     @property
     def errored(self):
         return self._errored
+
+    @property
+    def warned(self):
+        return self._warned
 
     @property
     def instance_id(self):
