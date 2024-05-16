@@ -55,6 +55,7 @@ class InstancesModel(QtGui.QStandardItemModel):
                 item = QtGui.QStandardItem(src_instance_label)
                 item.setData(instance_label, ITEM_LABEL_ROLE)
                 item.setData(instance_item.errored, ITEM_ERRORED_ROLE)
+                item.setData(instance_item.warned, ITEM_WARNED_ROLE)
                 item.setData(instance_item.id, ITEM_ID_ROLE)
                 item.setData(instance_item.removed, INSTANCE_REMOVED_ROLE)
                 if all_removed and not instance_item.removed:
