@@ -369,7 +369,7 @@ class QtRemotePublishController(BasePublisherController):
         pass
 
     @abstractmethod
-    def get_validation_report_items(self):
+    def get_validation_errors(self):
         pass
 
     @abstractmethod

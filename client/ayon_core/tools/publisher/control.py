@@ -1255,7 +1255,7 @@ class AbstractPublisherController(object):
         pass
 
     @abstractmethod
-    def get_validation_report_items(self):
+    def get_validation_errors(self):
         pass
 
     @abstractmethod
@@ -2267,7 +2267,7 @@ class PublisherController(BasePublisherController):
     def get_publish_report(self):
         return self._publish_report.get_report(self._publish_plugins)
 
-    def get_validation_report_items(self):
+    def get_validation_errors(self):
         return self._publish_validation_report_items.create_report()
 
     def _reset_publish(self):
