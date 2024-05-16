@@ -119,7 +119,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
     @classmethod
     def _get_icon_color(cls, name):
-        if name == "error" or "warning":
+        if name == "error" or name == "warning":
             return QtGui.QColor(colors[name])
         return QtGui.QColor(QtCore.Qt.white)
 
