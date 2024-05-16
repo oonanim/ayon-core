@@ -1123,24 +1123,24 @@ ValidationArtistMessage QLabel {
     background: {color:bg-buttons-disabled};
 }
 
-#ValidationReportItemTitleFrame {
+#ValidationErrorTitleFrame {
     border-radius: 0.2em;
     background: {color:bg-buttons};
 }
 
-#ValidationReportItemTitleFrame:hover {
+#ValidationErrorTitleFrame:hover {
     background: {color:bg-buttons-hover};
 }
 
-#ValidationReportItemTitleFrame[selected="1"] {
+#ValidationErrorTitleFrame[selected="1"] {
     background: {color:bg-view-selection};
 }
 
-#ValidationReportItemInstanceList {
+#ValidationErrorInstanceList {
     border-radius: 0;
 }
 
-#ValidationReportItemInstanceList::item {
+#ValidationErrorInstanceList::item {
     border-bottom: 1px solid {color:border};
     border-left: 1px solid {color:border};
 }
