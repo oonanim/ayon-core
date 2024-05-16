@@ -797,11 +797,13 @@ class _InstanceItem:
 
     @staticmethod
     def extract_basic_log_info(logs):
-        warned = False
-        errored = False
+        warned, errored = False, False
         for log in logs:
             if log["type"] == "error":
-                errored = True
+                if log.get("is_validation_error",False):
+                    errored = True
+                elif log.get("is_validation_warning",False):
+                    warned = True
             elif log["type"] == "record":
                 level_no = log["levelno"]
                 if level_no and level_no >= logging.WARNING:

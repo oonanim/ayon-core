@@ -17,10 +17,10 @@ class PluginItem:
         for instance_data in plugin_data["instances_data"]:
             for log_item in instance_data["logs"]:
                 errored = log_item["type"] == "error" and log_item.get("is_validation_error", False)
-                if errored:
-                    break
                 warned = log_item["type"] == "error" and log_item.get("is_validation_warning", False)
-            if errored:
+                if errored or warned:
+                    break
+            if errored or warned:
                 break
 
         self.warned = warned
