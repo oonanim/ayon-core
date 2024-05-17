@@ -411,6 +411,7 @@ class PublishFrame(QtWidgets.QWidget):
             self._set_validation_warnings()
         elif has_finished:
             self._set_finished()
+
         else:
             self._set_stopped()
 
