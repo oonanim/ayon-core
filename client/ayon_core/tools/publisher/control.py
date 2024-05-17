@@ -485,10 +485,10 @@ class PublishPluginActionItem:
 
 
 class ValidationErrorItem:
-    """Data driven validation report item.
+    """Data driven validation error item.
 
-    Prepared data container with information about validation report item and its
-    source plugin.
+    Prepared data container with information about validation error (PublishValidationError
+    or PublishValidationWarning) and its source plugin.
 
     Can be converted to raw data and recreated should be used for controller
     and UI connection.
@@ -1681,8 +1681,8 @@ class PublisherController(BasePublisherController):
         self._publish_context = None
         # Pyblish report
         self._publish_report = PublishReportMaker(self)
-        # Store validation errors' exceptions
-        self._publish_validation_report_items = PublishValidationErrors()
+        # Store exceptions of validation error
+        self._publish_validation_errors = PublishValidationErrors()
 
         # Publishing should stop at validation stage
         self._publish_up_validation = False
@@ -2347,7 +2347,7 @@ class PublisherController(BasePublisherController):
         return self._publish_report.get_report(self._publish_plugins)
 
     def get_validation_errors(self):
-        return self._publish_validation_report_items.create_report()
+        return self._publish_validation_errors.create_report()
 
     def _reset_publish(self):
         self._reset_attributes()
@@ -2370,7 +2370,7 @@ class PublisherController(BasePublisherController):
         )
 
         self._publish_report.reset(self._publish_context, self._create_context)
-        self._publish_validation_report_items.reset(self._publish_plugins_proxy)
+        self._publish_validation_errors.reset(self._publish_plugins_proxy)
 
         self.publish_max_progress = len(self._publish_plugins)
 
@@ -2659,7 +2659,7 @@ class PublisherController(BasePublisherController):
                            warning class containing detailed error information.
                            'instance' (pyblish.plugin.Instance): The instance of the object involved in the validation.
         """
-        self._publish_validation_report_items.add_error(
+        self._publish_validation_errors.add_error(
             result["plugin"],
             result["error"],
             result["instance"]
