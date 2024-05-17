@@ -628,7 +628,7 @@ class ValidationErrorsView(QtWidgets.QWidget):
         """Set errors into context and created titles.
 
         Args:
-            validation_error_report (PublishValidationErrorsReport): Report
+            grouped_error_items (PublishValidationErrorsReport): Report
                 with information about validation errors and publish plugin
                 actions.
         """
