@@ -225,8 +225,8 @@ class ValidateActionsWidget(QtWidgets.QFrame):
             "warning": {"failedOrWarning"}
         }
 
-        report_type = error_info["report_items"][-1].report_type
-        applicable_filters = filter_mapping.get(report_type, set())
+        exception_type = error_info["error_items"][-1].exception_type
+        applicable_filters = filter_mapping.get(exception_type, set())
         # Include 'all' universally
         applicable_filters.add("all")
 
@@ -295,12 +295,12 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
     _validation_error_pix = None
     _validation_warning_pix = None
 
-    def __init__(self, parent, report_type, icon_size):
+    def __init__(self, parent, exceptions_type, icon_size):
         super(ValidateErrorIconFrame, self).__init__(parent)
 
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self._report_type = report_type
+        self._exception_type = exceptions_type
         self._icon_size = icon_size
 
     @classmethod
@@ -339,10 +339,10 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
 
         # Determine the icon to use based on log state
         report_item_icon = None
-        if self._report_type == "error":
+        if self._exception_type == "error":
             color = self.error_color
             report_item_icon = self.get_validation_error_icon()
-        elif self._report_type == "warning":
+        elif self._exception_type == "warning":
             color = self.warning_color
             report_item_icon = self.get_validation_warning_icon()
         report_item_icon = change_pixmap_color(report_item_icon, color)
@@ -385,11 +385,11 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
 
         label_widget = QtWidgets.QLabel(error_info["title"], title_frame)
 
-        report_type = error_info["report_items"][-1].report_type
+        exception_type = error_info["error_items"][-1].exception_type
 
         # Icon display setup
         icon_size = 24
-        icon_label = ValidateErrorIconFrame(self, report_type, icon_size)
+        icon_label = ValidateErrorIconFrame(self, exception_type, icon_size)
         icon_label.setFixedSize(icon_size, icon_size)
 
         # Layout configuration
@@ -405,7 +405,7 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
 
         items = []
         context_validation = False
-        for error_item in error_info["report_items"]:
+        for error_item in error_info["error_items"]:
             context_validation = error_item.context_validation
             if context_validation:
                 toggle_instance_btn.setArrowType(QtCore.Qt.NoArrow)
@@ -1977,7 +1977,7 @@ class ReportsWidget(QtWidgets.QWidget):
         self._logs_view.set_plugins_filter([error_info["plugin_id"]])
 
         match_error_item = None
-        for error_item in error_info["report_items"]:
+        for error_item in error_info["error_items"]:
             instance_id = error_item.instance_id or CONTEXT_ID
             if instance_id in instance_ids:
                 match_error_item = error_item
