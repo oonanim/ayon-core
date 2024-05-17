@@ -284,18 +284,20 @@ class PublishReportMaker:
             except Exception:
                 msg = str(record.msg)
 
-            is_debug = record.levelno == logging.DEBUG
-            is_info = record.levelno == logging.INFO
-            is_warning = record.levelno == logging.WARNING
-            is_error = record.levelno == logging.ERROR
-            is_critical = record.levelno == logging.CRITICAL
+            levels = {
+                logging.DEBUG: "is_debug",
+                logging.INFO: "is_info",
+                logging.WARNING: "is_warning",
+                logging.ERROR: "is_error",
+                logging.CRITICAL: "is_critical"
+            }
+
+            log_levels = {level: False for level in levels.values()}
+            log_levels[levels.get(record.levelno, "")] = True
+
             output.append({
                 "type": "record",
-                "is_debug": is_debug,
-                "is_info": is_info,
-                "is_warning": is_warning,
-                "is_error": is_error,
-                "is_critical": is_critical,
+                **log_levels,
                 "msg": msg,
                 "name": record.name,
                 "lineno": record.lineno,
@@ -482,7 +484,7 @@ class PublishPluginActionItem:
         return cls(**data)
 
 
-class ValidationReportItem:
+class ValidationErrorItem:
     """Data driven validation report item.
 
     Prepared data container with information about validation report item and its
@@ -542,7 +544,7 @@ class ValidationReportItem:
         """Create new object based on result from controller.
 
         Returns:
-            ValidationReportItem: New object with filled data.
+            ValidationErrorItem: New object with filled data.
         """
 
         instance_label = None
@@ -569,23 +571,28 @@ class ValidationReportItem:
         return cls(**data)
 
 
-class PublishValidationReport:
-    """Publish validation report that can be parsed to raw data.
+class PublishValidationErrorsReport:
+    """Publish validation errors report that can be parsed to raw data.
 
     Args:
-        validation_report_items (List[ValidationErrorItem]): List of validation errors.
+        error_items (List[ValidationErrorItem]): List of validation errors.
         plugin_action_items (Dict[str, PublishPluginActionItem]): Action items
             by plugin id.
     """
 
-    def __init__(self, validation_report_items, plugin_action_items, has_errors, has_warnings):
-        self._validation_report_items = validation_report_items
+    def __init__(self,
+                 error_items,
+                 plugin_action_items,
+                 has_error_type_errors,
+                 has_warning_type_errors
+                 ):
+        self._error_items = error_items
         self._plugin_action_items = plugin_action_items
-        self._has_errors = has_errors
-        self._has_warnings = has_warnings
+        self.has_error_type_errors = has_error_type_errors
+        self.has_warning_type_errors = has_warning_type_errors
 
     def __iter__(self):
-        for item in self._validation_report_items:
+        for item in self._error_items:
             yield item
 
     def group_items_by_title(self):
@@ -601,7 +608,7 @@ class PublishValidationReport:
 
         ordered_plugin_ids = []
         report_items_by_plugin_id = collections.defaultdict(list)
-        for report_item in self._validation_report_items:
+        for report_item in self._error_items:
             plugin_id = report_item.plugin_id
             if plugin_id not in ordered_plugin_ids:
                 ordered_plugin_ids.append(plugin_id)
@@ -639,7 +646,7 @@ class PublishValidationReport:
 
         report_items = [
             item.to_data()
-            for item in self._validation_report_items
+            for item in self._error_items
         ]
 
         plugin_action_items = {
@@ -664,49 +671,32 @@ class PublishValidationReport:
                 using 'to_data' method.
 
         Returns:
-            PublishValidationReport: New object based on data.
+            PublishValidationErrorsReport: New object based on data.
         """
 
-        report_items = [
-            ValidationReportItem.from_data(report_item)
-            for report_item in data["report_items"]
+        error_items = [
+            ValidationErrorItem.from_data(error_item)
+            for error_item in data["error_items"]
         ]
         plugin_action_items = [
             PublishPluginActionItem.from_data(action_item)
             for action_item in data["plugin_action_items"]
         ]
-        return cls(report_items, plugin_action_items)
-
-    @property
-    def has_errors(self):
-        """At least one error was added."""
-
-        return bool(self._has_errors)
-
-    @property
-    def has_warnings(self):
-        """At least one warning was added."""
-
-        return bool(self._has_warnings)
+        return cls(error_items, plugin_action_items)
 
 
-class PublishValidationReportItems:
-    """Object to keep track about validation report by plugin."""
+class PublishValidationErrors:
+    """Object to keep track about validation errors by plugin."""
 
     def __init__(self):
         self._plugins_proxy = None
-        self._validation_report_items = []
         self._error_items = []
-        self._warning_items = []
+        self._error_type_errors = []
+        self._warning_type_errors = []
         self._plugin_action_items = {}
 
     def __bool__(self):
-        return self.has_validation_report_items
-
-    def has_validation_report_items(self):
-        """At least one validation report item was added."""
-
-        return bool(self._validation_report_items)
+        return self.has_errors
 
     @property
     def has_errors(self):
@@ -715,10 +705,16 @@ class PublishValidationReportItems:
         return bool(self._error_items)
 
     @property
-    def has_warnings(self):
+    def has_error_type_errors(self):
+        """At least one error was added."""
+
+        return bool(self._error_type_errors)
+
+    @property
+    def has_warning_type_errors(self):
         """At least one warning was added."""
 
-        return bool(self._warning_items)
+        return bool(self._warning_type_errors)
 
     def reset(self, plugins_proxy):
         """Reset object to default state.
@@ -729,42 +725,47 @@ class PublishValidationReportItems:
         """
 
         self._plugins_proxy = plugins_proxy
-        self._validation_report_items = []
         self._error_items = []
-        self._warning_items = []
+        self._error_type_errors = []
+        self._warning_type_errors = []
         self._plugin_action_items = {}
 
     def create_report(self):
         """Create report based on currently existing errors.
 
         Returns:
-            PublishValidationReport: Validation error report with all
+            PublishValidationErrorsReport: Validation error report with all
                 error information and publish plugin action items.
         """
 
-        return PublishValidationReport(
-            self._validation_report_items, self._plugin_action_items, self.has_errors, self.has_warnings
+        return PublishValidationErrorsReport(
+            self._error_items,
+            self._plugin_action_items,
+            self.has_error_type_errors,
+            self.has_warning_type_errors
         )
 
-    def add_validation_report_item(self, plugin, validation_report_item, instance):
-        """Add validation report item from pyblish result.
+    def add_error(self, plugin, error, instance):
+        """Add error from pyblish result.
 
         Args:
             plugin (pyblish.api.Plugin): Plugin which triggered error.
-            validation_report_item: Validation error or warning.
+            error (ValidationException): Validation error (PublishValidationError or PublishValidationWarning).
             instance (Union[pyblish.api.Instance, None]): Instance on which was
-                error or warning raised or None if was raised on context.
+                error raised (PublishValidationError or PublishValidationWarning) or None if was raised on context.
         """
+
+        # Make sure the cached report is cleared
         plugin_id = self._plugins_proxy.get_plugin_id(plugin)
-        self._ensure_validation_title(plugin, validation_report_item)
+        self._ensure_validation_title(plugin, error)
 
-        report_item = ValidationReportItem.from_result(plugin_id, validation_report_item, instance)
-        self._validation_report_items.append(report_item)
+        error_item = ValidationErrorItem.from_result(plugin_id, error, instance)
+        self._error_items.append(error_item)
 
-        if validation_report_item.report_type == "error":
-            self._error_items.append(report_item)
-        elif validation_report_item.report_type == "warning":
-            self._warning_items.append(report_item)
+        if error.report_type == "error":
+            self._error_type_errors.append(error_item)
+        elif error.report_type == "warning":
+            self._warning_type_errors.append(error_item)
 
         if plugin_id not in self._plugin_action_items:
             plugin_actions = self._plugins_proxy.get_plugin_action_items(plugin_id)
@@ -1681,7 +1682,7 @@ class PublisherController(BasePublisherController):
         # Pyblish report
         self._publish_report = PublishReportMaker(self)
         # Store validation errors' exceptions
-        self._publish_validation_report_items = PublishValidationReportItems()
+        self._publish_validation_report_items = PublishValidationErrors()
 
         # Publishing should stop at validation stage
         self._publish_up_validation = False
@@ -2647,34 +2648,33 @@ class PublisherController(BasePublisherController):
         self.publish_progress = self.publish_max_progress
         yield MainThreadItem(self.stop_publish)
 
-    def _add_validation_error(self, result):
-        self.publish_has_validation_errors = True
-        self._publish_validation_report_items.add_validation_report_item(
+    def _add_validation_exception(self, result: dict) -> None:
+        """
+        Adds a validation error or warning to the validation report collection, based on the provided result.
+
+        Args:
+            result (dict): A dictionary containing details of the validation issue, including:
+                           'plugin' (class): The plugin class that generated the validation issue.
+                           'error' (PublishValidationError or PublishValidationWarning): An instance of an error or
+                           warning class containing detailed error information.
+                           'instance' (pyblish.plugin.Instance): The instance of the object involved in the validation.
+        """
+        self._publish_validation_report_items.add_error(
             result["plugin"],
             result["error"],
             result["instance"]
         )
 
-    def _add_validation_warning(self, result):
-        """Add a validation warning to the publishing results.
+    def _add_validation_error(self, result: dict) -> None:
+        self.publish_has_validation_errors = True
+        self._add_validation_exception(result)
 
-        Args:
-            result (dict): The result dictionary containing 'plugin' and 'instance'.
-            warning_message (str): The warning message to be recorded.
-        """
+    def _add_validation_warning(self, result: dict) -> None:
         if self._ignore_warnings:
             return
 
-        # Mark that validation warnings have occurred
         self.publish_has_validation_warnings = True
-
-        # Create a PublishValidationWarning object and add it to the errors list
-        # warning = PublishValidationWarning(warning_message)
-        self._publish_validation_report_items.add_validation_report_item(
-            result["plugin"],
-            result["error"],
-            result["instance"]
-        )
+        self._add_validation_exception(result)
 
     def _process_and_continue(self, plugin, instance):
         result = pyblish.plugin.process(
@@ -2685,19 +2685,17 @@ class PublisherController(BasePublisherController):
         # Errors handling and reports
         exception = result.get("error")
         if exception:
-            has_validation_error = False
-            has_validation_warning = False
             if (
                 isinstance(exception, PublishValidationError)
                 and not self.publish_has_validated
             ):
-                has_validation_error = True
+                result["is_validation_error"] = True
                 self._add_validation_error(result)
             elif (
                 isinstance(exception, PublishValidationWarning)
                 and not self.publish_has_validated
             ):
-                has_validation_warning = True
+                result["is_validation_warning"] = True
                 self._add_validation_warning(result)
             else:
                 if isinstance(exception, KnownPublishError):
@@ -2709,9 +2707,6 @@ class PublisherController(BasePublisherController):
                     )
                 self.publish_error_msg = msg
                 self.publish_has_crashed = True
-
-            result["is_validation_error"] = has_validation_error
-            result["is_validation_warning"] = has_validation_warning
 
         self._publish_report.add_result(result)
 
