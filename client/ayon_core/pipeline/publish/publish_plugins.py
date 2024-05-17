@@ -25,7 +25,7 @@ class AbstractMetaContextPlugin(ABCMeta, ExplicitMetaPlugin):
     pass
 
 
-class PublishValidationReportItem(Exception):
+class PublishValidationException(Exception):
     """Validation error or warning occurred during publishing.
 
     Base class for reporting publishing failures or warnings.
@@ -39,27 +39,27 @@ class PublishValidationReportItem(Exception):
         detail (str): Any further details about the issue.
     """
     def __init__(self, message, title=None, description=None, detail=None):
-        super(PublishValidationReportItem, self).__init__(message)
+        super(PublishValidationException, self).__init__(message)
         self.message = message
         self.title = title
         self.description = description or message
         self.detail = detail
 
 
-class PublishValidationError(PublishValidationReportItem):
+class PublishValidationError(PublishValidationException):
     """Specific class for validation errors during publishing."""
 
     def __init__(self, message, title=None, description=None, detail=None):
         super(PublishValidationError, self).__init__(message, title, description, detail)
-        self.report_type = "error"
+        self.exception_type = "error"
 
 
-class PublishValidationWarning(PublishValidationReportItem):
+class PublishValidationWarning(PublishValidationException):
     """Specific class for validation warnings during publishing."""
 
     def __init__(self, message, title=None, description=None, detail=None):
         super(PublishValidationWarning, self).__init__(message, title, description, detail)
-        self.report_type = "warning"
+        self.exception_type = "warning"
 
 
 class PublishXmlValidationError(PublishValidationError):
