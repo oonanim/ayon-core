@@ -510,7 +510,7 @@ class ValidationErrorItem:
         title,
         description,
         detail,
-        report_type
+        exception_type
     ):
         self.instance_id = instance_id
         self.instance_label = instance_label
@@ -519,7 +519,7 @@ class ValidationErrorItem:
         self.title = title
         self.description = description
         self.detail = detail
-        self.report_type = report_type
+        self.exception_type = exception_type
 
     def to_data(self):
         """Serialize object to dictionary.
@@ -536,7 +536,7 @@ class ValidationErrorItem:
             "title": self.title,
             "description": self.description,
             "detail": self.detail,
-            "report_type": self.report_type,
+            "exception_type": self.exception_type,
         }
 
     @classmethod
@@ -563,7 +563,7 @@ class ValidationErrorItem:
             error.title,
             error.description,
             error.detail,
-            error.report_type
+            error.exception_type
         )
 
     @classmethod
@@ -607,32 +607,32 @@ class PublishValidationErrorsReport:
         """
 
         ordered_plugin_ids = []
-        report_items_by_plugin_id = collections.defaultdict(list)
-        for report_item in self._error_items:
-            plugin_id = report_item.plugin_id
+        error_items_by_plugin_id = collections.defaultdict(list)
+        for error_item in self._error_items:
+            plugin_id = error_item.plugin_id
             if plugin_id not in ordered_plugin_ids:
                 ordered_plugin_ids.append(plugin_id)
-            report_items_by_plugin_id[plugin_id].append(report_item)
+            error_items_by_plugin_id[plugin_id].append(error_item)
 
         grouped_error_items = []
         for plugin_id in ordered_plugin_ids:
             plugin_action_items = self._plugin_action_items[plugin_id]
-            error_items = report_items_by_plugin_id[plugin_id]
+            error_items = error_items_by_plugin_id[plugin_id]
 
             titles = []
-            report_items_by_title = collections.defaultdict(list)
-            for report_item in error_items:
-                title = report_item.title
+            error_items_by_title = collections.defaultdict(list)
+            for error_item in error_items:
+                title = error_item.title
                 if title not in titles:
-                    titles.append(report_item.title)
-                report_items_by_title[title].append(report_item)
+                    titles.append(error_item.title)
+                error_items_by_title[title].append(error_item)
 
             for title in titles:
                 grouped_error_items.append({
                     "id": uuid.uuid4().hex,
                     "plugin_id": plugin_id,
                     "plugin_action_items": list(plugin_action_items),
-                    "report_items": report_items_by_title[title],
+                    "error_items": error_items_by_title[title],
                     "title": title
                 })
         return grouped_error_items
@@ -644,7 +644,7 @@ class PublishValidationErrorsReport:
             Dict[str, Any]: Serialized data.
         """
 
-        report_items = [
+        error_items = [
             item.to_data()
             for item in self._error_items
         ]
@@ -658,7 +658,7 @@ class PublishValidationErrorsReport:
         }
 
         return {
-            "report_items": report_items,
+            "error_items": error_items,
             "plugin_action_items": plugin_action_items
         }
 
@@ -762,9 +762,9 @@ class PublishValidationErrors:
         error_item = ValidationErrorItem.from_result(plugin_id, error, instance)
         self._error_items.append(error_item)
 
-        if error.report_type == "error":
+        if error.exception_type == "error":
             self._error_type_errors.append(error_item)
-        elif error.report_type == "warning":
+        elif error.exception_type == "warning":
             self._warning_type_errors.append(error_item)
 
         if plugin_id not in self._plugin_action_items:
