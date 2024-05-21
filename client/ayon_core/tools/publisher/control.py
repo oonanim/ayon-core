@@ -578,6 +578,8 @@ class PublishValidationErrorsReport:
         error_items (List[ValidationErrorItem]): List of validation errors.
         plugin_action_items (Dict[str, PublishPluginActionItem]): Action items
             by plugin id.
+        has_error_type_errors (bool): Indicates whether there are error type errors.
+        has_warning_type_errors (bool): Indicates whether there are warning type errors.
     """
 
     def __init__(self,
@@ -682,7 +684,14 @@ class PublishValidationErrorsReport:
             PublishPluginActionItem.from_data(action_item)
             for action_item in data["plugin_action_items"]
         ]
-        return cls(error_items, plugin_action_items)
+
+        has_error_type_errors = data["has_error_type_errors"]
+        has_warning_type_errors = data["has_warning_type_errors"]
+
+        return cls(error_items,
+                   plugin_action_items,
+                   has_error_type_errors,
+                   has_warning_type_errors)
 
 
 class PublishValidationErrors:
