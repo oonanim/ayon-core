@@ -362,7 +362,7 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
     changing style on selection/deselection.
 
     Has toggle button to show/hide instances on which validation error happened
-    if there is a list (Validation error may happen on context).
+    if there is a list (Valdation error may happen on context).
     """
 
     selected = QtCore.Signal(str)
