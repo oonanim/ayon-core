@@ -2501,8 +2501,7 @@ class PublisherController(BasePublisherController):
         #   only in specific cases (e.g. when it happens for a first time)
 
         # There are validation errors and validation is passed
-        # - can't do any progress
-
+        # - can't do any progree
         if (
             self.publish_has_validated
             and self.publish_has_validation_errors
