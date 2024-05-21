@@ -286,11 +286,10 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
             so each item does not have to redraw it again.
     """
 
-    # error_color = QtGui.QColor("#ff4a4a")
-    # warning_color = QtGui.QColor("#ff9500")
+    log_level_colors = get_objected_colors("publisher", "log-level")
 
-    error_color = colors.get("error", None)
-    warning_color = colors.get("warning", None)
+    validation_error_color = log_level_colors["error"].get_qcolor()
+    validation_warning_color = log_level_colors["warning"].get_qcolor()
 
     _validation_error_pix = None
     _validation_warning_pix = None
@@ -340,10 +339,10 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
         # Determine the icon to use based on log state
         report_item_icon = None
         if self._exception_type == "error":
-            color = self.error_color
+            color = self.validation_error_color
             report_item_icon = self.get_validation_error_icon()
         elif self._exception_type == "warning":
-            color = self.warning_color
+            color = self.validation_warning_color
             report_item_icon = self.get_validation_warning_icon()
         report_item_icon = change_pixmap_color(report_item_icon, color)
         # Scale the icon to fit within the new rectangle while maintaining aspect ratio
@@ -1128,16 +1127,17 @@ class LogIconFrame(QtWidgets.QFrame):
         Paint event could be slow, maybe we could cache the image into pixmaps
             so each item does not have to redraw it again.
     """
+    log_level_colors = get_objected_colors("publisher", "log-level")
 
-    info_color = QtGui.QColor("#ff66e8")
-    warning_color = colors.get("warning", False)
-    error_color = colors.get("error", False)
+    validation_error_color = log_level_colors["error"].get_qcolor()
+    validation_warning_color = log_level_colors["warning"].get_qcolor()
+
     level_to_color = dict((
-        (10, QtGui.QColor("#ff66e8")),
-        (20, QtGui.QColor("#66abff")),
-        (30, QtGui.QColor("#ffba66")),
-        (40, QtGui.QColor("#ff4d58")),
-        (50, QtGui.QColor("#ff4f75")),
+        (10, log_level_colors["debug"].get_qcolor()),
+        (20, log_level_colors["info"].get_qcolor()),
+        (30, log_level_colors["warning"].get_qcolor()),
+        (40, log_level_colors["error"].get_qcolor()),
+        (50, log_level_colors["critical"].get_qcolor()),
     ))
     _error_pix = None
     _validation_error_pix = None
@@ -1246,10 +1246,10 @@ class LogIconFrame(QtWidgets.QFrame):
         # Handling different types of error states
         if self._is_error:
             if self._is_validation_error:
-                color = self.error_color  # Use specific error color
+                color = self.validation_error_color  # Use specific error color
                 log_icon = self.get_validation_error_icon()
             elif self._is_validation_warning:
-                color = self.warning_color  # Use specific warning color
+                color = self.validation_warning_color  # Use specific warning color
                 log_icon = self.get_validation_warning_icon()
             else:
                 log_icon = self.get_error_icon()  # Use generic error icon
