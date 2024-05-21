@@ -117,7 +117,7 @@ def get_objected_colors(*keys):
 
 
 def _load_stylesheet():
-    """Load stylesheet and trigger all related callbacks.
+    """Load strylesheet and trigger all related callbacks.
 
     Style require more than a stylesheet string. Stylesheet string
     contains paths to resources which must be registered into Qt application

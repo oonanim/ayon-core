@@ -439,7 +439,7 @@ class PublishPluginActionItem:
         action_id (str): Action id.
         plugin_id (str): Plugin id.
         active (bool): Action is active.
-        on_filter (str): Actions have 'on' attribute which define when can be
+        on_filter (str): Actions have 'on' attribte which define when can be
             action triggered (e.g. 'all', 'failed', ...).
         label (str): Action's label.
         icon (Union[str, None]) Action's icon.
@@ -541,7 +541,7 @@ class ValidationErrorItem:
 
     @classmethod
     def from_result(cls, plugin_id, error, instance):
-        """Create new object based on result from controller.
+        """Create new object based on resukt from controller.
 
         Returns:
             ValidationErrorItem: New object with filled data.
