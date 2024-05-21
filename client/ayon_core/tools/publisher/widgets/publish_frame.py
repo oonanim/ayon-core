@@ -36,7 +36,7 @@ class PublishFrame(QtWidgets.QWidget):
         super(PublishFrame, self).__init__(parent)
 
         # Bottom part of widget where process and callback buttons are showed
-        # - QFrame used to be able to set background using stylesheets easily
+        # - QFrame used to be able set background using stylesheets easily
         #   and not override all children widgets style
         content_frame = QtWidgets.QFrame(self)
         content_frame.setObjectName("PublishInfoFrame")
