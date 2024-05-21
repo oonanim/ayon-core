@@ -44,7 +44,7 @@ class VerticalScrollArea(QtWidgets.QScrollArea):
     """Scroll area for validation error titles.
 
     The biggest difference is that the scroll area has scroll bar on left side
-    and resize of content will also resize scroll area itself.
+    and resize of content will also resize scrollarea itself.
 
     Resize if deferred by 100ms because at the moment of resize are not yet
     propagated sizes and visibility of scroll bars.
@@ -204,7 +204,7 @@ class ValidateActionsWidget(QtWidgets.QFrame):
         self._actions_mapping = {}
 
     def set_error_info(self, error_info):
-        """Set selected plugin and show its actions.
+        """Set selected plugin and show it's actions.
 
         Clears current actions from widget and recreate them from the plugin.
 
@@ -971,7 +971,7 @@ class PublishInstanceCardWidget(BaseClickableFrame):
 
 
 class PublishInstancesViewWidget(QtWidgets.QWidget):
-    # Sane minimum width of instance cards - size calculated using font metrics
+    # Sane minimum width of instance cards - size calulated using font metrics
     _min_width_measure_string = 24 * "O"
     selection_changed = QtCore.Signal()
 
@@ -1988,7 +1988,7 @@ class ReportsWidget(QtWidgets.QWidget):
 
 
 class ReportPageWidget(QtWidgets.QFrame):
-    """Widgets showing report for artists.
+    """Widgets showing report for artis.
 
     There are 5 possible states:
     1. Publishing did not start yet.         > Only label.
