@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import collections
 import logging
-from ayon_core.tools.publisher.publish_report_viewer.delegates import colors
 
 try:
     import commonmark
