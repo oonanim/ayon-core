@@ -12,7 +12,8 @@ from .constants import (
     ITEM_ERRORED_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
-    INSTANCE_REMOVED_ROLE
+    INSTANCE_REMOVED_ROLE,
+    PLUGIN_ACTIONS_ROLE
 )
 
 
@@ -178,6 +179,7 @@ class PluginsModel(QtGui.QStandardItemModel):
                 item.setData(plugin_item.passed, PLUGIN_PASSED_ROLE)
                 item.setData(plugin_item.warned, ITEM_WARNED_ROLE)
                 item.setData(plugin_item.errored, ITEM_ERRORED_ROLE)
+                item.setData(plugin_item.actions, PLUGIN_ACTIONS_ROLE)
                 items.append(item)
                 self._items_by_id[plugin_item.id] = item
                 self._plugin_items_by_id[plugin_item.id] = item

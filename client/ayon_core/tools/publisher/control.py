@@ -141,10 +141,15 @@ class PublishReportMaker:
             "order": plugin.order,
             "targets": list(plugin.targets),
             "instances_data": [],
+            "actions": [],
             "actions_data": [],
             "skipped": False,
             "passed": False
         }
+
+    def set_plugin_actions(self, plugin, actions):
+        """Set actions for the current plugin."""
+        self._plugin_data_by_id[plugin.id]["actions"] = actions
 
     def set_plugin_skipped(self):
         """Set that current plugin has been skipped."""
@@ -377,6 +382,8 @@ class PublishPluginsProxy:
 
         self._action_ids_by_plugin_id[plugin_id] = action_ids
         self._actions_by_plugin_id[plugin_id] = actions_by_id
+
+        return actions
 
     def get_action(self, plugin_id, action_id):
         return self._actions_by_plugin_id[plugin_id][action_id]
@@ -2688,7 +2695,8 @@ class PublisherController(BasePublisherController):
         result = pyblish.plugin.process(
             plugin, self._publish_context, instance
         )
-        self._publish_plugins_proxy.get_plugin_actions(plugin)
+        actions = self._publish_plugins_proxy.get_plugin_actions(plugin)
+        self._publish_report.set_plugin_actions(plugin, actions)
 
         # Errors handling and reports
         exception = result.get("error")

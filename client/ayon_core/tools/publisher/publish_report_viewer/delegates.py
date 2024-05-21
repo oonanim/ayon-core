@@ -6,7 +6,8 @@ from .constants import (
     ITEM_ERRORED_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
-    INSTANCE_REMOVED_ROLE
+    INSTANCE_REMOVED_ROLE,
+    PLUGIN_ACTIONS_ROLE
 )
 
 colors = {
@@ -256,6 +257,50 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         # Draw label
         painter.setFont(option.font)
         painter.drawText(label_rect, QtCore.Qt.AlignVCenter, label)
+
+        # Draw action icon
+        icons = {
+            "action": awesome["adn"],
+            "angle-right": awesome["angle-right"],
+            "angle-left": awesome["angle-left"],
+            "plus-sign": awesome['plus'],
+            "minus-sign": awesome['minus']
+        }
+        body_rect = QtCore.QRectF()
+
+        perspective_icon = icons["angle-right"]
+        perspective_rect = QtCore.QRectF()
+        perspective_rect.setWidth(perspective_rect.height())
+        perspective_rect.adjust(0, 3, 0, 0)
+        perspective_rect.translate(
+            body_rect.width() - (perspective_rect.width() / 2 + 2),
+            0
+        )
+        # if index.data(Roles.PluginActionsVisibleRole):
+        if index.data(PLUGIN_ACTIONS_ROLE):
+            print(f'label = {label}')
+            # painter.save()
+            # action_state = index.data(Roles.PluginActionProgressRole)
+            # if action_state & PluginActionStates.HasFailed:
+            #     color = colors["error"]
+            # elif action_state & PluginActionStates.HasFinished:
+            #     color = colors["ok"]
+            # elif action_state & PluginActionStates.InProgress:
+            #     color = colors["active"]
+            # else:
+            #     color = colors["idle"]
+            #
+            # painter.setFont(fonts["smallAwesome"])
+            # painter.setPen(QtGui.QPen(color))
+            #
+            icon_rect = QtCore.QRectF(
+                option.rect.adjusted(
+                    label_rect.width() - perspective_rect.width() / 2,
+                    label_rect.height() / 3, 0, 0
+                )
+            )
+            painter.drawText(icon_rect, icons["action"])
+            #
 
         # Ok, we're done, tidy up.
         painter.restore()

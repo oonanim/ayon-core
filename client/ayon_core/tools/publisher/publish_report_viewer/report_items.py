@@ -12,6 +12,7 @@ class PluginItem:
         self.order = plugin_data["order"]
         self.skipped = plugin_data["skipped"]
         self.passed = plugin_data["passed"]
+        self.actions = plugin_data["actions"]
 
         warned, errored = False, False
         for instance_data in plugin_data["instances_data"]:
