@@ -259,48 +259,22 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         painter.drawText(label_rect, QtCore.Qt.AlignVCenter, label)
 
         # Draw action icon
-        icons = {
-            "action": awesome["adn"],
-            "angle-right": awesome["angle-right"],
-            "angle-left": awesome["angle-left"],
-            "plus-sign": awesome['plus'],
-            "minus-sign": awesome['minus']
-        }
-        body_rect = QtCore.QRectF()
-
-        perspective_icon = icons["angle-right"]
-        perspective_rect = QtCore.QRectF()
-        perspective_rect.setWidth(perspective_rect.height())
-        perspective_rect.adjust(0, 3, 0, 0)
-        perspective_rect.translate(
-            body_rect.width() - (perspective_rect.width() / 2 + 2),
-            0
+        from ayon_core.tools.publisher.widgets.widgets import IconValuePixmapLabel
+        from ayon_core.tools.publisher.widgets.icons import (
+            get_pixmap,
+            get_image,
         )
-        # if index.data(Roles.PluginActionsVisibleRole):
         if index.data(PLUGIN_ACTIONS_ROLE):
-            print(f'label = {label}')
-            # painter.save()
-            # action_state = index.data(Roles.PluginActionProgressRole)
-            # if action_state & PluginActionStates.HasFailed:
-            #     color = colors["error"]
-            # elif action_state & PluginActionStates.HasFinished:
-            #     color = colors["ok"]
-            # elif action_state & PluginActionStates.InProgress:
-            #     color = colors["active"]
-            # else:
-            #     color = colors["idle"]
-            #
-            # painter.setFont(fonts["smallAwesome"])
-            # painter.setPen(QtGui.QPen(color))
-            #
-            icon_rect = QtCore.QRectF(
-                option.rect.adjusted(
-                    label_rect.width() - perspective_rect.width() / 2,
-                    label_rect.height() / 3, 0, 0
-                )
+            action_icon = get_pixmap("checked")
+            action_icon_size = QtCore.QSize(icon_size, icon_size)
+            action_icon = action_icon.scaled(action_icon_size, QtCore.Qt.KeepAspectRatio,
+                                             QtCore.Qt.SmoothTransformation)
+
+            action_icon_point = QtCore.QPoint(
+                label_rect.right() - action_icon.width() - 5,  # Adjust the position as needed
+                label_rect.center().y() - int(action_icon.height() / 2)
             )
-            painter.drawText(icon_rect, icons["action"])
-            #
+            painter.drawPixmap(action_icon_point, action_icon)
 
         # Ok, we're done, tidy up.
         painter.restore()
