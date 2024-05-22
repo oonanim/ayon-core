@@ -1,5 +1,6 @@
 import collections
 from qtpy import QtWidgets, QtCore, QtGui
+from ayon_core.tools.publisher.widgets.icons import get_pixmap
 from .constants import (
     ITEM_IS_GROUP_ROLE,
     ITEM_WARNED_ROLE,
@@ -205,7 +206,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         if widget:
             style = widget.style()
         else:
-            style = QtWidgets.QApplicaion.style()
+            style = QtWidgets.QApplication.style()
 
         style.proxy().drawPrimitive(
             QtWidgets.QStyle.PE_PanelItemViewItem, option, painter, widget
@@ -220,10 +221,21 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         expander_rect = QtCore.QRectF(bg_rect)
         expander_rect.setWidth(expander_rect.height() + 5)
 
+        # Define the frame for the action icon
+        action_rect = QtCore.QRectF(bg_rect)
+        if index.data(PLUGIN_ACTIONS_ROLE):
+            action_rect.setWidth(action_rect.height() + 5)
+            action_rect.translate(
+                bg_rect.width() - action_rect.width(),  # Adjusted position to include margin
+                0
+            )
+        else:
+            action_rect.setWidth(0)
+
         label_rect = QtCore.QRectF(
             expander_rect.x() + expander_rect.width(),
             expander_rect.y(),
-            bg_rect.width() - expander_rect.width(),
+            bg_rect.width() - expander_rect.width() - action_rect.width(),  # Adjusted width for margin
             expander_rect.height()
         )
 
@@ -242,11 +254,16 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
             expander_icon = self._get_icon("", icon_size)
 
         label = index.data(QtCore.Qt.DisplayRole)
-        label = option.fontMetrics.elidedText(
+        elided_label = option.fontMetrics.elidedText(
             label, QtCore.Qt.ElideRight, label_rect.width()
         )
 
+        # Check if the label is elided and set the tooltip accordingly
+        if label != elided_label:
+            index.model().setData(index, label, QtCore.Qt.ToolTipRole)
+
         painter.save()
+
         # Draw icon
         pix_point = QtCore.QPoint(
             expander_rect.center().x() - int(expander_icon.width() / 2),
@@ -256,23 +273,23 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
         # Draw label
         painter.setFont(option.font)
-        painter.drawText(label_rect, QtCore.Qt.AlignVCenter, label)
+        painter.drawText(label_rect, QtCore.Qt.AlignVCenter, elided_label)
 
         # Draw action icon
-        from ayon_core.tools.publisher.widgets.widgets import IconValuePixmapLabel
-        from ayon_core.tools.publisher.widgets.icons import (
-            get_pixmap,
-            get_image,
-        )
         if index.data(PLUGIN_ACTIONS_ROLE):
-            action_icon = get_pixmap("checked")
+            action_icon = get_pixmap("adn")
+            icon_size = action_rect.height() - 2  # Size of the action icon
             action_icon_size = QtCore.QSize(icon_size, icon_size)
             action_icon = action_icon.scaled(action_icon_size, QtCore.Qt.KeepAspectRatio,
                                              QtCore.Qt.SmoothTransformation)
 
+            # Adjust label_rect to avoid overlap with action icon
+            label_rect.setWidth(label_rect.width() - action_rect.width() - 10)  # Added margin
+
+            # Draw the action icon inside the defined frame
             action_icon_point = QtCore.QPoint(
-                label_rect.right() - action_icon.width() - 5,  # Adjust the position as needed
-                label_rect.center().y() - int(action_icon.height() / 2)
+                action_rect.left() + (action_rect.width() - action_icon.width()) / 2,
+                action_rect.top() + (action_rect.height() - action_icon.height()) / 2
             )
             painter.drawPixmap(action_icon_point, action_icon)
 
