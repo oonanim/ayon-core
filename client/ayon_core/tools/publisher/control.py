@@ -374,7 +374,7 @@ class PublishPluginsProxy:
         action_ids = []
         actions_by_id = {}
 
-        actions = getattr(plugin, "actions", None) or []
+        actions = getattr(plugin, "actions", [])
         for action in actions:
             action_id = action.id
             action_ids.append(action_id)
