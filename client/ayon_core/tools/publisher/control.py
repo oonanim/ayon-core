@@ -368,13 +368,15 @@ class PublishPluginsProxy:
         self._actions_by_plugin_id = {}
         self._action_ids_by_plugin_id = {}
 
-    def get_plugin_actions(self, plugin):
-        plugin_id = plugin.id
-        self._plugins_by_id[plugin_id] = plugin
+        for plugin in plugins:
+            plugin_id = plugin.id
+            self._plugins_by_id[plugin_id] = plugin
+
+    def get_plugin_actions(self, plugin_id):
         action_ids = []
         actions_by_id = {}
 
-        actions = getattr(plugin, "actions", [])
+        actions = getattr(self._plugins_by_id[plugin_id], "actions", [])
         for action in actions:
             action_id = action.id
             action_ids.append(action_id)
@@ -382,8 +384,6 @@ class PublishPluginsProxy:
 
         self._action_ids_by_plugin_id[plugin_id] = action_ids
         self._actions_by_plugin_id[plugin_id] = actions_by_id
-
-        return actions
 
     def get_action(self, plugin_id, action_id):
         return self._actions_by_plugin_id[plugin_id][action_id]
@@ -416,6 +416,7 @@ class PublishPluginsProxy:
             List[PublishPluginActionItem]: Items with information about publish
                 plugin actions.
         """
+        self.get_plugin_actions(plugin_id)
 
         return [
             self._create_action_item(
@@ -2695,7 +2696,7 @@ class PublisherController(BasePublisherController):
         result = pyblish.plugin.process(
             plugin, self._publish_context, instance
         )
-        actions = self._publish_plugins_proxy.get_plugin_actions(plugin)
+        actions = self._publish_plugins_proxy.get_plugin_action_items(plugin.id)
         self._publish_report.set_plugin_actions(plugin, actions)
 
         # Errors handling and reports
