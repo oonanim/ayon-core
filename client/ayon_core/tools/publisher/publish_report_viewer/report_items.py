@@ -12,13 +12,14 @@ class PluginItem:
         self.order = plugin_data["order"]
         self.skipped = plugin_data["skipped"]
         self.passed = plugin_data["passed"]
-        self.actions = plugin_data["actions"]
 
         warned, errored = False, False
         for instance_data in plugin_data["instances_data"]:
             for log_item in instance_data["logs"]:
-                errored = log_item["type"] == "error" and log_item.get("is_validation_error", True)
-                warned = log_item["type"] == "error" and log_item.get("is_validation_warning", False)
+                if not log_item["type"] == "error":
+                    continue
+                errored = log_item.get("is_validation_error", False)
+                warned = log_item.get("is_validation_warning", False)
                 if errored or warned:
                     break
             if errored or warned:
@@ -26,6 +27,22 @@ class PluginItem:
 
         self.warned = warned
         self.errored = errored
+        self.actions = self._get_active_actions(plugin_data["actions"])
+
+    def _get_active_actions(self, actions):
+        plugin_actions = actions
+        item_warned = self.warned
+        item_errored = self.errored
+
+        active_actions = [
+            action for action in plugin_actions
+            if action.active and (
+                    action.on == "all" or
+                    (action.on == "failedOrWarning" and (item_warned or item_errored)) or
+                    (action.on == "failed" and item_errored)
+            )
+        ]
+        return active_actions
 
     @property
     def id(self):
