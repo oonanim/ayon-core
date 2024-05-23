@@ -144,12 +144,44 @@ class PublishReportMaker:
             "actions": [],
             "actions_data": [],
             "skipped": False,
-            "passed": False
+            "passed": False,
+            "warned": False,
+            "errored": False
         }
 
     def set_plugin_actions(self, plugin, actions):
         """Set actions for the current plugin."""
-        self._plugin_data_by_id[plugin.id]["actions"] = actions
+        self._get_plugin_active_actions(plugin, actions)
+
+    def _check_plugin_logs_for_errors_and_warnings(self, plugin):
+        """Check the plugin logs for validation errors and warnings."""
+        warned, errored = False, False
+
+        for instance_data in self._plugin_data_by_id[plugin.id]["instances_data"]:
+            for log_item in instance_data["logs"]:
+                if log_item["type"] == "error":
+                    errored = log_item.get("is_validation_error", False)
+                    warned = log_item.get("is_validation_warning", False)
+
+        self._plugin_data_by_id[plugin.id]["warned"] = warned
+        self._plugin_data_by_id[plugin.id]["errored"] = errored
+
+    def _get_plugin_active_actions(self, plugin, actions):
+        """Get active actions based on the plugin's error and warning status."""
+        self._check_plugin_logs_for_errors_and_warnings(plugin)
+
+        item_warned = self._plugin_data_by_id[plugin.id]["warned"]
+        item_errored = self._plugin_data_by_id[plugin.id]["errored"]
+
+        active_actions = [
+            action for action in actions
+            if action.active and (
+                    action.on_filter == "all" or
+                    (action.on_filter == "failedOrWarning" and (item_warned or item_errored)) or
+                    (action.on_filter == "failed" and item_errored)
+            )
+        ]
+        self._plugin_data_by_id[plugin.id]["actions"] = active_actions
 
     def set_plugin_skipped(self):
         """Set that current plugin has been skipped."""
@@ -2696,8 +2728,6 @@ class PublisherController(BasePublisherController):
         result = pyblish.plugin.process(
             plugin, self._publish_context, instance
         )
-        actions = self._publish_plugins_proxy.get_plugin_action_items(plugin.id)
-        self._publish_report.set_plugin_actions(plugin, actions)
 
         # Errors handling and reports
         exception = result.get("error")
@@ -2726,6 +2756,9 @@ class PublisherController(BasePublisherController):
                 self.publish_has_crashed = True
 
         self._publish_report.add_result(result)
+
+        actions = self._publish_plugins_proxy.get_plugin_action_items(plugin.id)
+        self._publish_report.set_plugin_actions(plugin, actions)
 
         self._publish_next_process()
 
