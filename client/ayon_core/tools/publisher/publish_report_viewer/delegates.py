@@ -222,8 +222,19 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         expander_rect.setWidth(expander_rect.height() + 5)
 
         # Define the frame for the action icon
+        plugin_actions = index.data(PLUGIN_ACTIONS_ROLE) or []
+        item_warned = index.data(ITEM_WARNED_ROLE)
+        item_errored = index.data(ITEM_ERRORED_ROLE)
+
+        active_actions = [
+            action for action in plugin_actions
+            if action.on == "all" or
+            (action.on == "failedOrWarning" and (item_warned or item_errored)) or
+            (action.on == "failed" and item_errored)
+        ]
+
         action_rect = QtCore.QRectF(bg_rect)
-        if index.data(PLUGIN_ACTIONS_ROLE):
+        if active_actions:
             action_rect.setWidth(action_rect.height() + 5)
             action_rect.translate(
                 bg_rect.width() - action_rect.width(),  # Adjusted position to include margin
@@ -276,7 +287,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         painter.drawText(label_rect, QtCore.Qt.AlignVCenter, elided_label)
 
         # Draw action icon
-        if index.data(PLUGIN_ACTIONS_ROLE):
+        if active_actions:
             action_icon = get_pixmap("adn")
             icon_size = action_rect.height() - 2  # Size of the action icon
             action_icon_size = QtCore.QSize(icon_size, icon_size)
