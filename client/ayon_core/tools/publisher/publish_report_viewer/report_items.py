@@ -37,9 +37,9 @@ class PluginItem:
         active_actions = [
             action for action in plugin_actions
             if action.active and (
-                    action.on == "all" or
-                    (action.on == "failedOrWarning" and (item_warned or item_errored)) or
-                    (action.on == "failed" and item_errored)
+                    action.on_filter == "all" or
+                    (action.on_filter == "failedOrWarning" and (item_warned or item_errored)) or
+                    (action.on_filter == "failed" and item_errored)
             )
         ]
         return active_actions
