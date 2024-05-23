@@ -228,9 +228,11 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
         active_actions = [
             action for action in plugin_actions
-            if action.on == "all" or
-            (action.on == "failedOrWarning" and (item_warned or item_errored)) or
-            (action.on == "failed" and item_errored)
+            if action.active and (
+                    action.on == "all" or
+                    (action.on == "failedOrWarning" and (item_warned or item_errored)) or
+                    (action.on == "failed" and item_errored)
+            )
         ]
 
         action_rect = QtCore.QRectF(bg_rect)
