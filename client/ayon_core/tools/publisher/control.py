@@ -141,7 +141,7 @@ class PublishReportMaker:
             "order": plugin.order,
             "targets": list(plugin.targets),
             "instances_data": [],
-            "actions": [],
+            "action_items": [],
             "actions_data": [],
             "skipped": False,
             "passed": False,
@@ -149,43 +149,29 @@ class PublishReportMaker:
             "errored": False
         }
 
-    def set_plugin_actions(self, plugin, actions):
-        """Set actions for the current plugin."""
-        self._get_plugin_active_actions(plugin, actions)
-
-    def _check_plugin_logs_for_errors_and_warnings(self, plugin):
-        """Check the plugin logs for validation errors and warnings."""
-        warned, errored = False, False
-
-        for instance_data in self._plugin_data_by_id[plugin.id]["instances_data"]:
-            for log_item in instance_data["logs"]:
-                if log_item["type"] == "error":
-                    errored = log_item.get("is_validation_error", False)
-                    warned = log_item.get("is_validation_warning", False)
-
-        self._plugin_data_by_id[plugin.id]["warned"] = warned
-        self._plugin_data_by_id[plugin.id]["errored"] = errored
-
-    def _get_plugin_active_actions(self, plugin, actions):
-        """Get active actions based on the plugin's error and warning status."""
-        self._check_plugin_logs_for_errors_and_warnings(plugin)
-
-        item_warned = self._plugin_data_by_id[plugin.id]["warned"]
-        item_errored = self._plugin_data_by_id[plugin.id]["errored"]
-
-        active_actions = [
-            action for action in actions
-            if action.active and (
-                    action.on_filter == "all" or
-                    (action.on_filter == "failedOrWarning" and (item_warned or item_errored)) or
-                    (action.on_filter == "failed" and item_errored)
-            )
-        ]
-        self._plugin_data_by_id[plugin.id]["actions"] = active_actions
-
     def set_plugin_skipped(self):
         """Set that current plugin has been skipped."""
         self._current_plugin_data["skipped"] = True
+
+    def set_plugin_warned(self):
+        """Set that current plugin has been warned."""
+        self._current_plugin_data["warned"] = True
+
+    def set_plugin_errored(self):
+        """Set that current plugin has been errored."""
+        self._current_plugin_data["errored"] = True
+
+    def set_plugin_action_items(self, action_items):
+        """Set action items for the current plugin.
+
+        This method updates the `action_items` attribute of the currently
+        processed plugin with the provided action items.
+
+        Args:
+            action_items (list): A list of action items to be associated with
+                                 the current plugin.
+        """
+        self._current_plugin_data["action_items"] = action_items
 
     def add_result(self, result):
         """Handle result of one plugin and it's instance."""
@@ -404,12 +390,13 @@ class PublishPluginsProxy:
             plugin_id = plugin.id
             self._plugins_by_id[plugin_id] = plugin
 
-    def get_plugin_actions(self, plugin_id):
+    def set_plugin_actions(self, plugin_id, exception):
         action_ids = []
         actions_by_id = {}
 
         actions = getattr(self._plugins_by_id[plugin_id], "actions", [])
-        for action in actions:
+        filtered_actions = self._filter_plugin_active_actions(actions, exception)
+        for action in filtered_actions:
             action_id = action.id
             action_ids.append(action_id)
             actions_by_id[action_id] = action
@@ -448,7 +435,6 @@ class PublishPluginsProxy:
             List[PublishPluginActionItem]: Items with information about publish
                 plugin actions.
         """
-        self.get_plugin_actions(plugin_id)
 
         return [
             self._create_action_item(
@@ -468,6 +454,21 @@ class PublishPluginsProxy:
             label,
             icon
         )
+
+    @staticmethod
+    def _filter_plugin_active_actions(actions, exception):
+        """Get active actions based on the plugin's error and warning status."""
+        item_errored = isinstance(exception, PublishValidationError)
+        item_warned = isinstance(exception, PublishValidationWarning)
+
+        def is_action_active(action):
+            return action.active and (
+                    action.on == "all" or
+                    (action.on == "failedOrWarning" and (item_warned or item_errored)) or
+                    (action.on == "failed" and item_errored)
+            )
+
+        return [action for action in actions if is_action_active(action)]
 
 
 class PublishPluginActionItem:
@@ -2731,6 +2732,9 @@ class PublisherController(BasePublisherController):
 
         # Errors handling and reports
         exception = result.get("error")
+
+        self._publish_plugins_proxy.set_plugin_actions(plugin.id, exception)
+
         if exception:
             if (
                 isinstance(exception, PublishValidationError)
@@ -2738,12 +2742,14 @@ class PublisherController(BasePublisherController):
             ):
                 result["is_validation_error"] = True
                 self._add_validation_error(result)
+                self._publish_report.set_plugin_errored()
             elif (
                 isinstance(exception, PublishValidationWarning)
                 and not self.publish_has_validated
             ):
                 result["is_validation_warning"] = True
                 self._add_validation_warning(result)
+                self._publish_report.set_plugin_warned()
             else:
                 if isinstance(exception, KnownPublishError):
                     msg = str(exception)
@@ -2756,9 +2762,7 @@ class PublisherController(BasePublisherController):
                 self.publish_has_crashed = True
 
         self._publish_report.add_result(result)
-
-        actions = self._publish_plugins_proxy.get_plugin_action_items(plugin.id)
-        self._publish_report.set_plugin_actions(plugin, actions)
+        self._publish_report.set_plugin_action_items(self._publish_plugins_proxy.get_plugin_action_items(plugin.id))
 
         self._publish_next_process()
 

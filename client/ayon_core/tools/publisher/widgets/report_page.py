@@ -231,12 +231,6 @@ class ValidateActionsWidget(QtWidgets.QFrame):
 
         plugin_action_items = error_info["plugin_action_items"]
         for plugin_action_item in plugin_action_items:
-            if not plugin_action_item.active:
-                continue
-
-            if plugin_action_item.on_filter not in applicable_filters:
-                continue
-
             action_id = plugin_action_item.action_id
             self._actions_mapping[action_id] = plugin_action_item
 
