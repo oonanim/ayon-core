@@ -25,6 +25,7 @@ colors = {
     "group-hover": QtGui.QColor("#3c3c3c"),
     "group-selected-hover": QtGui.QColor("#555555")
 }
+from ayon_core.tools.publisher.widgets.report_page import ActionButton
 
 
 class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
@@ -40,6 +41,11 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
     _item_border_size = 1.0 / 7.0
     _group_pix_offset_ratio = 1.0 / 3.0
     _group_pix_stroke_size_ratio = 1.0 / 7.0
+
+    def __init__(self, parent=None, controller=None):
+        super(GroupItemDelegate, self).__init__(parent)
+        self.action_icon_rects = {}
+        self._controller = controller
 
     @classmethod
     def _get_path_stroker(cls):
@@ -229,6 +235,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
                 bg_rect.width() - action_rect.width(),  # Adjusted position to include margin
                 0
             )
+            self.action_icon_rects[index] = action_rect  # Save the action icon rect for mouse click detection
         else:
             action_rect.setWidth(0)
 
@@ -373,3 +380,30 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
         # Ok, we're done, tidy up.
         painter.restore()
+
+    def editorEvent(self, event, model, option, index):
+        if event.type() == QtCore.QEvent.MouseButtonPress:
+            pos = event.pos()
+            if index in self.action_icon_rects:
+                if self.action_icon_rects[index].contains(pos):
+                    self.show_actions_menu(option.widget, index)
+                    return True
+        return super().editorEvent(event, model, option, index)
+
+    def show_actions_menu(self, parent_widget, index):
+        actions = index.data(PLUGIN_ACTIONS_ROLE)
+        if not actions:
+            return
+
+        menu = QtWidgets.QMenu(parent_widget)
+        for plugin_action_item in actions:
+            action_button = ActionButton(plugin_action_item, menu)
+            action_button.action_clicked.connect(self._on_action_click)
+            widget_action = QtWidgets.QWidgetAction(menu)
+            widget_action.setDefaultWidget(action_button)
+            menu.addAction(widget_action)
+
+        menu.exec_(QtGui.QCursor.pos())
+
+    def _on_action_click(self, plugin_id, action_id):
+        self._controller.run_action(plugin_id, action_id)

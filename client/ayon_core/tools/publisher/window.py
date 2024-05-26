@@ -185,7 +185,7 @@ class PublisherWindow(QtWidgets.QDialog):
 
         # Details - Publish details
         publish_details_widget = PublishReportViewerWidget(
-            content_stacked_widget
+            content_stacked_widget, controller=controller
         )
 
         content_stacked_layout = QtWidgets.QStackedLayout(

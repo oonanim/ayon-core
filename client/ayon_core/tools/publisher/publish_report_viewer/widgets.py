@@ -349,7 +349,7 @@ class DetailsPopup(QtWidgets.QDialog):
 
 
 class PublishReportViewerWidget(QtWidgets.QFrame):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, controller=None):
         super(PublishReportViewerWidget, self).__init__(parent)
 
         instances_model = InstancesModel()
@@ -405,7 +405,7 @@ class PublishReportViewerWidget(QtWidgets.QFrame):
             QtWidgets.QAbstractItemView.NoEditTriggers)
         plugins_view.setExpandsOnDoubleClick(False)
 
-        plugins_delegate = GroupItemDelegate(plugins_view)
+        plugins_delegate = GroupItemDelegate(plugins_view, controller=controller)
         plugins_view.setItemDelegate(plugins_delegate)
 
         details_widget = QtWidgets.QWidget(self)
