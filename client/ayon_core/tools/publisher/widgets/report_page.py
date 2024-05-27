@@ -218,17 +218,6 @@ class ValidateActionsWidget(QtWidgets.QFrame):
             self.setVisible(False)
             return
 
-        # Mapping of report types to their applicable filters (excluding 'all')
-        filter_mapping = {
-            "error": {"failed", "failedOrWarning"},
-            "warning": {"failedOrWarning"}
-        }
-
-        exception_type = error_info["error_items"][-1].exception_type
-        applicable_filters = filter_mapping.get(exception_type, set())
-        # Include 'all' universally
-        applicable_filters.add("all")
-
         plugin_action_items = error_info["plugin_action_items"]
         for plugin_action_item in plugin_action_items:
             action_id = plugin_action_item.action_id
