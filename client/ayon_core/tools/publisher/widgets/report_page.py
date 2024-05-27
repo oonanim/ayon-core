@@ -276,12 +276,12 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
     _validation_error_pix = None
     _validation_warning_pix = None
 
-    def __init__(self, parent, exceptions_type, icon_size):
+    def __init__(self, parent, exception_type, icon_size):
         super(ValidateErrorIconFrame, self).__init__(parent)
 
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self._exception_type = exceptions_type
+        self._exception_type = exception_type
         self._icon_size = icon_size
 
     @classmethod
