@@ -778,7 +778,8 @@ class _InstanceItem:
 
     @staticmethod
     def extract_basic_log_info(logs):
-        warned, errored = False, False
+        warned = False
+        errored = False
         for log in logs:
             if log["type"] == "error":
                 if log.get("is_validation_error",False):
@@ -1180,7 +1181,6 @@ class LogIconFrame(QtWidgets.QFrame):
             QtGui.QPainter.Antialiasing
             | QtGui.QPainter.SmoothPixmapTransform
         )
-        # Disable drawing of the pen (no outlines will be drawn)
         painter.setPen(QtCore.Qt.NoPen)
 
         # Set a default background color (white), used if no icon is drawn

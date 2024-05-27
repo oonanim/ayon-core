@@ -270,7 +270,6 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
             index.model().setData(index, label, QtCore.Qt.ToolTipRole)
 
         painter.save()
-
         # Draw icon
         pix_point = QtCore.QPoint(
             expander_rect.center().x() - int(expander_icon.width() / 2),
