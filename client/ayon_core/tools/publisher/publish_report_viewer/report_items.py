@@ -49,7 +49,7 @@ class LogItem:
     def __init__(self, log_item_data, plugin_id, instance_id):
         self._instance_id = instance_id
         self._plugin_id = plugin_id
-        self._errored = log_item_data["type"] == "error" and log_item_data.get("is_validation_error", True)
+        self._errored = log_item_data["type"] == "error" and log_item_data.get("is_validation_error", False)
         self._warned = log_item_data.get("is_validation_warning", False)
         self.data = log_item_data
 
