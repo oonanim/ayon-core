@@ -276,12 +276,12 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
     _validation_error_pix = None
     _validation_warning_pix = None
 
-    def __init__(self, parent, exception_type, icon_size):
+    def __init__(self, parent, is_blocking, icon_size):
         super(ValidateErrorIconFrame, self).__init__(parent)
 
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self._exception_type = exception_type
+        self._is_blocking = is_blocking
         self._icon_size = icon_size
 
     @classmethod
@@ -320,10 +320,10 @@ class ValidateErrorIconFrame(QtWidgets.QFrame):
 
         # Determine the icon to use based on log state
         report_item_icon = None
-        if self._exception_type == "error":
+        if self._is_blocking:
             color = self.validation_error_color
             report_item_icon = self.get_validation_error_icon()
-        elif self._exception_type == "warning":
+        else:
             color = self.validation_warning_color
             report_item_icon = self.get_validation_warning_icon()
         report_item_icon = change_pixmap_color(report_item_icon, color)
@@ -366,11 +366,11 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
 
         label_widget = QtWidgets.QLabel(error_info["title"], title_frame)
 
-        exception_type = error_info["error_items"][-1].exception_type
+        is_blocking = error_info["error_items"][-1].is_blocking
 
         # Icon display setup
         icon_size = 24
-        icon_label = ValidateErrorIconFrame(self, exception_type, icon_size)
+        icon_label = ValidateErrorIconFrame(self, is_blocking, icon_size)
         icon_label.setFixedSize(icon_size, icon_size)
 
         # Layout configuration
@@ -688,6 +688,7 @@ class _InstanceItem:
         exists,
         logs,
         errored,
+        is_blocking,
         warned
     ):
         self.id = instance_id
@@ -698,6 +699,7 @@ class _InstanceItem:
         self.exists = exists
         self.logs = logs
         self.errored = errored
+        self.is_blocking = is_blocking
         self.warned = warned
 
     def __eq__(self, other):
@@ -747,8 +749,7 @@ class _InstanceItem:
 
     @classmethod
     def from_report(cls, instance_id, instance_data, logs):
-        errored, warned = cls.extract_basic_log_info(logs)
-
+        errored, is_blocking, warned = cls.extract_basic_log_info(logs)
         return cls(
             instance_id,
             instance_data["creator_identifier"],
@@ -758,12 +759,13 @@ class _InstanceItem:
             instance_data["exists"],
             logs,
             errored,
-            warned,
+            is_blocking,
+            warned
         )
 
     @classmethod
     def create_context_item(cls, context_label, logs):
-        errored, warned = cls.extract_basic_log_info(logs)
+        errored, is_blocking, warned = cls.extract_basic_log_info(logs)
         return cls(
             CONTEXT_ID,
             None,
@@ -773,27 +775,26 @@ class _InstanceItem:
             True,
             logs,
             errored,
+            is_blocking,
             warned
         )
 
     @staticmethod
     def extract_basic_log_info(logs):
-        warned = False
-        errored = False
+        errored, is_blocking, warned = False, False, False
         for log in logs:
             if log["type"] == "error":
-                if log.get("is_validation_error",False):
-                    errored = True
-                elif log.get("is_validation_warning",False):
-                    warned = True
+                errored = True
+                if log["is_blocking"]:
+                    is_blocking = True
             elif log["type"] == "record":
                 level_no = log["levelno"]
                 if level_no and level_no >= logging.WARNING:
                     warned = True
 
-            if warned and errored:
+            if errored and is_blocking and warned:
                 break
-        return errored, warned
+        return errored, is_blocking, warned
 
 
 class FamilyGroupLabel(QtWidgets.QWidget):
@@ -834,9 +835,11 @@ class PublishInstanceCardWidget(BaseClickableFrame):
         icon_widget.setObjectName("ProductTypeIconLabel")
 
         label_widget = QtWidgets.QLabel(instance.label, self)
-
         if instance.errored:
-            state_pix = self.get_error_pix()
+            if instance.is_blocking:
+                state_pix = self.get_error_pix()
+            else:
+                state_pix = self.get_non_blocking_error_pix()
         elif instance.warned:
             state_pix = self.get_warning_pix()
         elif publish_finished:
@@ -873,6 +876,10 @@ class PublishInstanceCardWidget(BaseClickableFrame):
             get_image("error"),
             publisher_colors["error"].get_qcolor()
         )
+        cls._non_blocking_error_pix = paint_image_with_color(
+            get_image("warning"),
+            publisher_colors["warning"].get_qcolor()
+        )
         cls._success_pix = paint_image_with_color(
             get_image("success"),
             publisher_colors["success"].get_qcolor()
@@ -893,6 +900,12 @@ class PublishInstanceCardWidget(BaseClickableFrame):
         if cls._error_pix is None:
             cls._prepare_pixes()
         return cls._error_pix
+
+    @classmethod
+    def get_non_blocking_error_pix(cls):
+        if cls._non_blocking_error_pix is None:
+            cls._prepare_pixes()
+        return cls._non_blocking_error_pix
 
     @classmethod
     def get_success_pix(cls):
@@ -1056,7 +1069,6 @@ class PublishInstancesViewWidget(QtWidgets.QWidget):
         publish_finished = (
             self._controller.publish_has_crashed
             or self._controller.publish_has_validation_errors
-            or self._controller.publish_has_validation_warnings
             or self._controller.publish_has_finished
         )
         instances_by_family = collections.defaultdict(list)
@@ -1078,7 +1090,6 @@ class PublishInstancesViewWidget(QtWidgets.QWidget):
             sorted_items = sorted(instance_items, key=lambda i: i.label)
             for instance_item in sorted_items:
                 icon = identifier_icons[instance_item.creator_identifier]
-
                 widget = PublishInstanceCardWidget(
                     instance_item, icon, publish_finished, self._instance_view
                 )
@@ -1136,7 +1147,7 @@ class LogIconFrame(QtWidgets.QFrame):
         self._is_error = log["type"] == "error"
 
         self._is_validation_error = bool(log.get("is_validation_error", False))
-        self._is_validation_warning = bool(log.get("is_validation_warning", False))
+        self._is_blocking = bool(log.get("is_blocking", False))
 
         self._is_log_debug = bool(log.get("is_debug", False))
         self._is_log_info = bool(log.get("is_info", False))
@@ -1228,11 +1239,12 @@ class LogIconFrame(QtWidgets.QFrame):
         # Handling different types of error states
         if self._is_error:
             if self._is_validation_error:
-                color = self.validation_error_color  # Use specific error color
-                log_icon = self.get_validation_error_icon()
-            elif self._is_validation_warning:
-                color = self.validation_warning_color  # Use specific warning color
-                log_icon = self.get_validation_warning_icon()
+                if self._is_blocking:
+                    color = self.validation_error_color  # Use specific error color
+                    log_icon = self.get_validation_error_icon()
+                else:
+                    color = self.validation_warning_color  # Use specific warning color
+                    log_icon = self.get_validation_warning_icon()
             else:
                 log_icon = self.get_error_icon()  # Use generic error icon
 
@@ -1911,8 +1923,7 @@ class ReportsWidget(QtWidgets.QWidget):
         validation_error_mode = False
         if (
             not self._controller.publish_has_crashed
-            and (self._controller.publish_has_validation_errors
-                 or self._controller.publish_has_validation_warnings)
+            and self._controller.publish_has_validation_errors
         ):
             view = self._validation_error_view
             validation_error_mode = True
@@ -2020,7 +2031,7 @@ class ReportPageWidget(QtWidgets.QFrame):
             header_label = "Nothing to report until you run publish"
         elif self._controller.publish_has_crashed:
             header_label = "Publish error report"
-        elif self._controller.publish_has_validation_errors or self._controller.publish_has_validation_warnings:
+        elif self._controller.publish_has_validation_errors:
             header_label = "Publish validation report"
         elif self._controller.publish_has_finished:
             header_label = "Publish success report"

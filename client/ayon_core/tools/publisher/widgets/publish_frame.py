@@ -387,28 +387,29 @@ class PublishFrame(QtWidgets.QWidget):
         has_crashed = self._controller.publish_has_crashed
         has_validated = self._controller.publish_has_validated
         has_errors = self._controller.publish_has_validation_errors
-        has_warnings = self._controller.publish_has_validation_warnings
+        has_blocking_errors = self._controller.publish_has_validation_blocking_errors
         has_finished = self._controller.publish_has_finished
 
         # Set button enabled states and visibility
         enabled_state = not has_crashed
         self._validate_btn.setEnabled(enabled_state and not has_validated)
         self._publish_btn.setEnabled(enabled_state and not has_finished)
-        self._ignore_btn.setEnabled(enabled_state and has_warnings)
+        self._ignore_btn.setEnabled(enabled_state and not has_blocking_errors)
 
-        self._validate_btn.setVisible(has_validated and not (has_errors or has_warnings))
-        self._publish_btn.setVisible(has_validated and not (has_errors or has_warnings))
-        self._ignore_btn.setVisible(has_warnings and not has_errors)
+        self._validate_btn.setVisible(has_validated and not has_errors)
+        self._publish_btn.setVisible(has_validated and not has_errors)
+        self._ignore_btn.setVisible(has_errors and not has_blocking_errors)
 
         # Handle various states
         if has_crashed:
             self._set_error_msg()
         elif has_errors:
-            self._set_progress_visibility(False)
-            self._set_validation_errors()
-        elif has_warnings:
-            self._set_progress_visibility(False)
-            self._set_validation_warnings()
+            if has_blocking_errors:
+                self._set_progress_visibility(False)
+                self._set_validation_errors()
+            else:
+                self._set_progress_visibility(False)
+                self._set_validation_non_blocking_errors()
         elif has_finished:
             self._set_finished()
 
@@ -441,10 +442,10 @@ class PublishFrame(QtWidgets.QWidget):
         self._message_label_top.setText("Check results above please")
         self._set_success_property(2)
 
-    def _set_validation_warnings(self):
-        self._set_main_label("Your publish has passed studio validations with warnings.")
+    def _set_validation_non_blocking_errors(self):
+        self._set_main_label("Your publish has passed studio validations with non-blocking errors.")
         self._message_label_top.setText(
-            "Please review the warnings above and decide whether to address or ignore them.")
+            "Please review the errors above and decide whether to address or ignore them.")
         self._set_success_property(3)
 
     def _set_finished(self):

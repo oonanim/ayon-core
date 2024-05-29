@@ -8,7 +8,7 @@ from .constants import (
     ITEM_ID_ROLE,
     ITEM_IS_GROUP_ROLE,
     ITEM_LABEL_ROLE,
-    ITEM_WARNED_ROLE,
+    ITEM_BLOCKING_ROLE,
     ITEM_ERRORED_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
@@ -56,7 +56,7 @@ class InstancesModel(QtGui.QStandardItemModel):
                 item = QtGui.QStandardItem(src_instance_label)
                 item.setData(instance_label, ITEM_LABEL_ROLE)
                 item.setData(instance_item.errored, ITEM_ERRORED_ROLE)
-                item.setData(instance_item.warned, ITEM_WARNED_ROLE)
+                item.setData(instance_item.is_blocking, ITEM_BLOCKING_ROLE)
                 item.setData(instance_item.id, ITEM_ID_ROLE)
                 item.setData(instance_item.removed, INSTANCE_REMOVED_ROLE)
                 if all_removed and not instance_item.removed:
@@ -177,7 +177,7 @@ class PluginsModel(QtGui.QStandardItemModel):
                 item.setData(plugin_item.id, ITEM_ID_ROLE)
                 item.setData(plugin_item.skipped, PLUGIN_SKIPPED_ROLE)
                 item.setData(plugin_item.passed, PLUGIN_PASSED_ROLE)
-                item.setData(plugin_item.warned, ITEM_WARNED_ROLE)
+                item.setData(plugin_item.is_blocking, ITEM_BLOCKING_ROLE)
                 item.setData(plugin_item.errored, ITEM_ERRORED_ROLE)
                 item.setData(plugin_item.actions, PLUGIN_ACTIONS_ROLE)
                 items.append(item)

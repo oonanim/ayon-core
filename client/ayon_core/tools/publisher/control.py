@@ -13,7 +13,6 @@ import re
 import six
 import arrow
 import pyblish.api
-import pyblish.plugin
 import ayon_api
 
 from ayon_core.lib.events import QueuedEventSystem
@@ -42,8 +41,6 @@ from ayon_core.pipeline.create.context import (
 from ayon_core.pipeline.publish import get_publish_instance_label
 from ayon_core.tools.common_models import ProjectsModel, HierarchyModel
 from ayon_core.lib.profiles_filtering import filter_profiles
-
-from ayon_core.pipeline.publish import PublishValidationWarning
 
 # Define constant for plugin orders offset
 PLUGIN_ORDER_OFFSET = 0.5
@@ -145,21 +142,13 @@ class PublishReportMaker:
             "actions_data": [],
             "skipped": False,
             "passed": False,
-            "warned": False,
-            "errored": False
+            "errored": False,
+            "is_blocking": False,
         }
 
     def set_plugin_skipped(self):
         """Set that current plugin has been skipped."""
         self._current_plugin_data["skipped"] = True
-
-    def set_plugin_warned(self):
-        """Set that current plugin has been warned."""
-        self._current_plugin_data["warned"] = True
-
-    def set_plugin_errored(self):
-        """Set that current plugin has been errored."""
-        self._current_plugin_data["errored"] = True
 
     def set_plugin_action_items(self, action_items):
         """Set action items for the current plugin.
@@ -185,6 +174,8 @@ class PublishReportMaker:
             "logs": self._extract_instance_log_items(result),
             "process_time": result["duration"]
         })
+        self._current_plugin_data["errored"] = result.get("is_validation_error", False)
+        self._current_plugin_data["is_blocking"] = result.get("is_blocking", False)
 
     def add_action_result(self, action, result):
         """Add result of single action."""
@@ -348,11 +339,11 @@ class PublishReportMaker:
 
             # Action result does not have 'is_validation_error'
             is_validation_error = result.get("is_validation_error", False)
-            is_validation_warning = result.get("is_validation_warning", False)
+            is_blocking = result.get("is_blocking", False)
             output.append({
                 "type": "error",
                 "is_validation_error": is_validation_error,
-                "is_validation_warning": is_validation_warning,
+                "is_blocking": is_blocking,
                 "msg": msg,
                 "filename": str(fname),
                 "lineno": str(line_no),
@@ -458,14 +449,14 @@ class PublishPluginsProxy:
     @staticmethod
     def _filter_plugin_active_actions(actions, exception):
         """Get active actions based on the plugin's error and warning status."""
-        item_errored = isinstance(exception, PublishValidationError)
-        item_warned = isinstance(exception, PublishValidationWarning)
+        plugin_errored = isinstance(exception, PublishValidationError)
+        error_is_blocking = getattr(exception, "is_blocking", False)
 
         def is_action_active(action):
             return action.active and (
                     action.on == "all" or
-                    (action.on == "failedOrWarning" and (item_warned or item_errored)) or
-                    (action.on == "failed" and item_errored)
+                    (action.on == "failedOrWarning" and plugin_errored) or
+                    (action.on == "failed" and (plugin_errored and error_is_blocking))
             )
 
         return [action for action in actions if is_action_active(action)]
@@ -551,7 +542,7 @@ class ValidationErrorItem:
         title,
         description,
         detail,
-        exception_type
+        is_blocking
     ):
         self.instance_id = instance_id
         self.instance_label = instance_label
@@ -560,7 +551,7 @@ class ValidationErrorItem:
         self.title = title
         self.description = description
         self.detail = detail
-        self.exception_type = exception_type
+        self.is_blocking = is_blocking
 
     def to_data(self):
         """Serialize object to dictionary.
@@ -577,7 +568,7 @@ class ValidationErrorItem:
             "title": self.title,
             "description": self.description,
             "detail": self.detail,
-            "exception_type": self.exception_type,
+            "is_blocking": self.is_blocking,
         }
 
     @classmethod
@@ -604,7 +595,7 @@ class ValidationErrorItem:
             error.title,
             error.description,
             error.detail,
-            error.exception_type
+            error.is_blocking
         )
 
     @classmethod
@@ -812,9 +803,9 @@ class PublishValidationErrors:
         error_item = ValidationErrorItem.from_result(plugin_id, error, instance)
         self._error_items.append(error_item)
 
-        if error.exception_type == "error":
+        if error.is_blocking:
             self._error_type_errors.append(error_item)
-        elif error.exception_type == "warning":
+        else:
             self._warning_type_errors.append(error_item)
 
         if plugin_id not in self._plugin_action_items:
@@ -1260,11 +1251,11 @@ class AbstractPublisherController(object):
 
     @property
     @abstractmethod
-    def publish_has_validation_warnings(self):
-        """During validation happened at least one validation warning.
+    def publish_has_validation_blocking_errors(self):
+        """During validation happened at least one validation blocking error.
 
         Returns:
-            bool: Validation warning was raised during validation.
+            bool: Validation blocking error was raised during validation.
         """
 
         pass
@@ -1432,7 +1423,7 @@ class BasePublisherController(AbstractPublisherController):
         self._publish_has_validated = False
 
         self._publish_has_validation_errors = False
-        self._publish_has_validation_warnings = False
+        self._publish_has_validation_blocking_errors = False
         self._publish_has_crashed = False
         # All publish plugins are processed
         self._publish_has_started = False
@@ -1563,8 +1554,8 @@ class BasePublisherController(AbstractPublisherController):
     def _get_publish_has_validation_errors(self):
         return self._publish_has_validation_errors
 
-    def _get_publish_has_validation_warnings(self):
-        return self._publish_has_validation_warnings
+    def _get_publish_has_validation_blocking_errors(self):
+        return self._publish_has_validation_blocking_errors
 
     def _set_publish_has_validation_errors(self, value):
         if self._publish_has_validation_errors != value:
@@ -1574,11 +1565,11 @@ class BasePublisherController(AbstractPublisherController):
                 {"value": value}
             )
 
-    def _set_publish_has_validation_warnings(self, value):
-        if self._publish_has_validation_warnings != value:
-            self._publish_has_validation_warnings = value
+    def _set_publish_has_validation_blocking_errors(self, value):
+        if self._publish_has_validation_blocking_errors != value:
+            self._publish_has_validation_blocking_errors = value
             self._emit_event(
-                "publish.has_validation_warnings.changed",
+                "publish.has_validation_blocking_errors.changed",
                 {"value": value}
             )
 
@@ -1627,8 +1618,8 @@ class BasePublisherController(AbstractPublisherController):
     publish_has_validation_errors = property(
         _get_publish_has_validation_errors, _set_publish_has_validation_errors
     )
-    publish_has_validation_warnings = property(
-        _get_publish_has_validation_warnings, _set_publish_has_validation_warnings
+    publish_has_validation_blocking_errors = property(
+        _get_publish_has_validation_blocking_errors, _set_publish_has_validation_blocking_errors
     )
     publish_max_progress = property(
         _get_publish_max_progress, _set_publish_max_progress
@@ -1648,7 +1639,7 @@ class BasePublisherController(AbstractPublisherController):
         self.publish_has_validated = False
         self.publish_has_crashed = False
         self.publish_has_validation_errors = False
-        self.publish_has_validation_warnings = False
+        self.publish_has_validation_blocking_errors = False
         self.publish_has_finished = False
 
         self.publish_error_msg = None
@@ -2463,11 +2454,7 @@ class PublisherController(BasePublisherController):
         self._start_publish()
 
     def ignore_warnings(self):
-        """Ignore validation warnings and continue the publishing process."""
-        if not self.publish_has_validation_warnings:
-            self.log.info("No validation warnings to ignore.")
-            return
-
+        """Ignore validation non-blocking errors and continue the publishing process."""
         self._ignore_warnings = True
         self._reset_publish()
 
@@ -2475,7 +2462,7 @@ class PublisherController(BasePublisherController):
         if self.publish_is_running:
             self.log.info("Publishing is currently running and will continue.")
         else:
-            self.log.info("Resuming publishing after ignoring warnings.")
+            self.log.info("Resuming publishing after ignoring non-blocking errors.")
             if self._btn_clicked == "validate":
                 self.validate()  # or self.publish() depending on context
             elif self._btn_clicked == "publish":
@@ -2715,14 +2702,12 @@ class PublisherController(BasePublisherController):
         )
 
     def _add_validation_error(self, result: dict) -> None:
-        self.publish_has_validation_errors = True
-        self._add_validation_exception(result)
-
-    def _add_validation_warning(self, result: dict) -> None:
-        if self._ignore_warnings:
+        if not result["is_blocking"] and self._ignore_warnings:
             return
 
-        self.publish_has_validation_warnings = True
+        self.publish_has_validation_errors = True
+        if result["is_blocking"]:
+            self.publish_has_validation_blocking_errors = True
         self._add_validation_exception(result)
 
     def _process_and_continue(self, plugin, instance):
@@ -2741,15 +2726,8 @@ class PublisherController(BasePublisherController):
                 and not self.publish_has_validated
             ):
                 result["is_validation_error"] = True
+                result["is_blocking"] = exception.is_blocking
                 self._add_validation_error(result)
-                self._publish_report.set_plugin_errored()
-            elif (
-                isinstance(exception, PublishValidationWarning)
-                and not self.publish_has_validated
-            ):
-                result["is_validation_warning"] = True
-                self._add_validation_warning(result)
-                self._publish_report.set_plugin_warned()
             else:
                 if isinstance(exception, KnownPublishError):
                     msg = str(exception)

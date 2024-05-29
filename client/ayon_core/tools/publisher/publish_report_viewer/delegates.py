@@ -3,8 +3,8 @@ from qtpy import QtWidgets, QtCore, QtGui
 from ayon_core.tools.publisher.widgets.icons import get_pixmap
 from .constants import (
     ITEM_IS_GROUP_ROLE,
-    ITEM_WARNED_ROLE,
     ITEM_ERRORED_ROLE,
+    ITEM_BLOCKING_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
     INSTANCE_REMOVED_ROLE,
@@ -248,9 +248,10 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
         icon_size = expander_rect.height()
         if index.data(ITEM_ERRORED_ROLE):
-            expander_icon = self._get_icon("error", icon_size)
-        elif index.data(ITEM_WARNED_ROLE):
-            expander_icon = self._get_icon("warning", icon_size)
+            if index.data(ITEM_BLOCKING_ROLE):
+                expander_icon = self._get_icon("error", icon_size)
+            else:
+                expander_icon = self._get_icon("warning", icon_size)
         elif index.data(PLUGIN_SKIPPED_ROLE):
             expander_icon = self._get_icon("skipped", icon_size)
         elif index.data(PLUGIN_PASSED_ROLE):

@@ -13,8 +13,8 @@ class PluginItem:
         self.skipped = plugin_data["skipped"]
         self.passed = plugin_data["passed"]
         self.actions = plugin_data["action_items"]
-        self.warned = plugin_data["warned"]
         self.errored = plugin_data["errored"]
+        self.is_blocking = plugin_data["is_blocking"]
 
     @property
     def id(self):
@@ -29,16 +29,18 @@ class InstanceItem:
         self.removed = not instance_data.get("exists", True)
 
         logs = logs_by_instance_id.get(instance_id) or []
-        errored, warned = False, False
+        errored, is_blocking = False, False
         for log_item in logs:
             if log_item.errored:
                 errored = True
+                if log_item.is_blocking:
+                    is_blocking = True
+                    break
+            if errored and is_blocking:
                 break
-            elif log_item.warned:
-                warned = True
 
         self.errored = errored
-        self.warned = warned
+        self.is_blocking = is_blocking
 
     @property
     def id(self):
@@ -50,7 +52,7 @@ class LogItem:
         self._instance_id = instance_id
         self._plugin_id = plugin_id
         self._errored = log_item_data.get("is_validation_error", False)
-        self._warned = log_item_data.get("is_validation_warning", False)
+        self._is_blocking = log_item_data.get("is_blocking", False)
         self.data = log_item_data
 
     def __getitem__(self, key):
@@ -61,8 +63,8 @@ class LogItem:
         return self._errored
 
     @property
-    def warned(self):
-        return self._warned
+    def is_blocking(self):
+        return self._is_blocking
 
     @property
     def instance_id(self):

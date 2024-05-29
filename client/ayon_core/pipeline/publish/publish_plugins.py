@@ -25,41 +25,28 @@ class AbstractMetaContextPlugin(ABCMeta, ExplicitMetaPlugin):
     pass
 
 
-class PublishValidationException(Exception):
-    """Validation error or warning occurred during publishing.
+class PublishValidationError(Exception):
+    """Validation error happened during publishing.
 
-    Base class for reporting publishing failures or warnings.
+    This exception should be used when validation publishing failed.
 
     Has additional UI specific attributes that may be handy for artist.
 
     Args:
-        message (str): Short explanation of the issue.
-        title (str): Title displayed in UI. Instances are grouped under this title.
-        description (str): Detailed description of the issue. Markdown syntax is allowed.
-        detail (str): Any further details about the issue.
+        message(str): Message of error. Short explanation an issue.
+        title(str): Title showed in UI. All instances are grouped under
+            single title.
+        description(str): Detailed description of an error. It is possible
+            to use Markdown syntax.
     """
-    def __init__(self, message, title=None, description=None, detail=None):
-        super(PublishValidationException, self).__init__(message)
+
+    def __init__(self, message, title=None, description=None, detail=None, is_blocking=True):
         self.message = message
         self.title = title
         self.description = description or message
         self.detail = detail
-
-
-class PublishValidationError(PublishValidationException):
-    """Specific class for validation errors during publishing."""
-
-    def __init__(self, message, title=None, description=None, detail=None):
-        super(PublishValidationError, self).__init__(message, title, description, detail)
-        self.exception_type = "error"
-
-
-class PublishValidationWarning(PublishValidationException):
-    """Specific class for validation warnings during publishing."""
-
-    def __init__(self, message, title=None, description=None, detail=None):
-        super(PublishValidationWarning, self).__init__(message, title, description, detail)
-        self.exception_type = "warning"
+        self.is_blocking = is_blocking
+        super(PublishValidationError, self).__init__(message)
 
 
 class PublishXmlValidationError(PublishValidationError):
