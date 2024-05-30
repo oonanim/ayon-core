@@ -392,11 +392,10 @@ class PublishFrame(QtWidgets.QWidget):
         if has_crashed:
             self._set_error_msg()
         elif has_errors:
+            self._set_progress_visibility(False)
             if has_blocking_errors:
-                self._set_progress_visibility(False)
                 self._set_validation_errors()
             else:
-                self._set_progress_visibility(False)
                 self._set_validation_non_blocking_errors()
         elif has_finished:
             self._set_finished()
