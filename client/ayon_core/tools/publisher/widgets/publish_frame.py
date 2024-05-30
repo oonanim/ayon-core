@@ -330,7 +330,7 @@ class PublishFrame(QtWidgets.QWidget):
         if self._last_instance_label:
             self._instance_label.setText(self._last_instance_label)
 
-        self._set_success_property(4)
+        self._set_success_property(3)
         self._set_progress_visibility(True)
         self._set_main_label("Publishing...")
         self._message_label_top.setText("")
@@ -426,7 +426,7 @@ class PublishFrame(QtWidgets.QWidget):
             "Hit publish (play button) to continue."
         )
 
-        self._set_success_property(5)
+        self._set_success_property(4)
 
     def _set_error_msg(self):
         """Show error message to artist on publish crash."""
@@ -446,7 +446,7 @@ class PublishFrame(QtWidgets.QWidget):
         self._set_main_label("Your publish has passed studio validations with non-blocking errors.")
         self._message_label_top.setText(
             "Please review the errors above and decide whether to address or ignore them.")
-        self._set_success_property(3)
+        self._set_success_property(2)
 
     def _set_finished(self):
         self._set_main_label("Finished")
@@ -477,11 +477,10 @@ class PublishFrame(QtWidgets.QWidget):
         State enum:
         - None - Default state after restart
         - 0 - Success finish
-        - 1 - Crash happened
+        - 1 - Error happened
         - 2 - Validation error
-        - 3 - Validation warning
-        - 4 - In progress
-        - 5 - Stopped/Paused
+        - 3 - In progress
+        - 4 - Stopped/Paused
         """
 
         if state is None:

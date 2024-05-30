@@ -1045,11 +1045,7 @@ PixmapButton:disabled {
 	background: {color:publisher:error};
 }
 
-#PublishInfoFrame[state="3"] {
-	background: {color:publisher:warning};
-}
-
-#PublishInfoFrame[state="4"], #PublishInfoFrame[state="5"] {
+#PublishInfoFrame[state="3"], #PublishInfoFrame[state="4"] {
     background: {color:publisher:progress};
 }
 
