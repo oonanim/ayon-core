@@ -363,18 +363,6 @@ class PublishFrame(QtWidgets.QWidget):
         QtWidgets.QApplication.processEvents()
 
     def _on_publish_stop(self):
-        """
-        Handle the UI updates and control states after the publishing process stops.
-
-        This method updates the progress bar to reflect the completion of the publishing process,
-        adjusts the enabled and visible states of UI buttons based on the various states of the
-        publishing process tracked by the controller, and updates labels to reflect the current state.
-
-        Depending on the outcome of the publishing process (crashed, validated, has errors/warnings,
-        or finished), the method sets the appropriate UI messages and visibility of control elements.
-        It also ensures that UI elements are reset and ready for the next operation.
-        """
-        # Update UI elements based on the publishing state
         self._progress_bar.setValue(self._controller.publish_progress)
 
         self._reset_btn.setEnabled(True)

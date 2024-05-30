@@ -1,14 +1,15 @@
 import collections
 from qtpy import QtWidgets, QtCore, QtGui
+from ayon_core.tools.publisher.widgets.report_page import ActionButton
 from ayon_core.tools.publisher.widgets.icons import get_pixmap
 from .constants import (
     ITEM_IS_GROUP_ROLE,
     ITEM_ERRORED_ROLE,
-    ITEM_BLOCKING_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
     INSTANCE_REMOVED_ROLE,
-    PLUGIN_ACTIONS_ROLE
+    PLUGIN_ACTIONS_ROLE,
+    ITEM_BLOCKING_ROLE,
 )
 
 colors = {
@@ -25,7 +26,6 @@ colors = {
     "group-hover": QtGui.QColor("#3c3c3c"),
     "group-selected-hover": QtGui.QColor("#555555")
 }
-from ayon_core.tools.publisher.widgets.report_page import ActionButton
 
 
 class GroupItemDelegate(QtWidgets.QStyledItemDelegate):

@@ -519,8 +519,8 @@ class PublishPluginActionItem:
 class ValidationErrorItem:
     """Data driven validation error item.
 
-    Prepared data container with information about validation error (PublishValidationError
-    or PublishValidationWarning) and its source plugin.
+    Prepared data container with information about validation error and it's
+    source plugin.
 
     Can be converted to raw data and recreated should be used for controller
     and UI connection.
@@ -794,9 +794,9 @@ class PublishValidationErrors:
 
         Args:
             plugin (pyblish.api.Plugin): Plugin which triggered error.
-            error (ValidationException): Validation error (PublishValidationError or PublishValidationWarning).
+            error (ValidationException): Validation error.
             instance (Union[pyblish.api.Instance, None]): Instance on which was
-                error raised (PublishValidationError or PublishValidationWarning) or None if was raised on context.
+                error raised or None if was raised on context.
         """
 
         # Make sure the cached report is cleared

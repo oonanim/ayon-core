@@ -1090,6 +1090,7 @@ class PublishInstancesViewWidget(QtWidgets.QWidget):
             sorted_items = sorted(instance_items, key=lambda i: i.label)
             for instance_item in sorted_items:
                 icon = identifier_icons[instance_item.creator_identifier]
+
                 widget = PublishInstanceCardWidget(
                     instance_item, icon, publish_finished, self._instance_view
                 )
