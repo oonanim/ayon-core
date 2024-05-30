@@ -516,7 +516,7 @@ class PublishFrame(QtWidgets.QWidget):
         self._controller.validate()
 
     def _on_ignore_warnings_clicked(self):
-        self._controller.ignore_warnings()
+        self._controller.ignore_non_blocking_errors()
 
     def _on_publish_clicked(self):
         self._controller.publish()
