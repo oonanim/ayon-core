@@ -1171,7 +1171,7 @@ class LogIconFrame(QtWidgets.QFrame):
         return cls._validation_warning_pix
 
     @classmethod
-    def get_validation_info_icon(cls):
+    def get_checked_icon(cls):
         if cls._validation_info_pix is None:
             cls._validation_info_pix = get_pixmap("checked")
         return cls._validation_info_pix
@@ -1252,12 +1252,7 @@ class LogIconFrame(QtWidgets.QFrame):
         # Handling different types of record states
         elif self._is_record:
             color = self._log_color  # Use log-specific color
-            if self._is_log_info:
-                log_icon = self.get_validation_info_icon()
-            elif self._is_log_warning:
-                log_icon = self.get_validation_warning_icon()
-            elif self._is_log_error:
-                log_icon = self.get_validation_error_icon()
+            log_icon = self.get_checked_icon()
 
         return log_icon, color
 
