@@ -127,7 +127,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
     @classmethod
     def _get_icon_color(cls, name):
-        if name == "error" or name == "warning":
+        if name in ["error", "warning"]:
             return QtGui.QColor(colors[name])
         return QtGui.QColor(QtCore.Qt.white)
 
@@ -232,17 +232,17 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         if index.data(PLUGIN_ACTIONS_ROLE):
             action_rect.setWidth(action_rect.height() + 5)
             action_rect.translate(
-                bg_rect.width() - action_rect.width(),  # Adjusted position to include margin
+                bg_rect.width() - action_rect.width(),
                 0
             )
-            self.action_icon_rects[index] = action_rect  # Save the action icon rect for mouse click detection
+            self.action_icon_rects[index] = action_rect
         else:
             action_rect.setWidth(0)
 
         label_rect = QtCore.QRectF(
             expander_rect.x() + expander_rect.width(),
             expander_rect.y(),
-            bg_rect.width() - expander_rect.width() - action_rect.width(),  # Adjusted width for margin
+            bg_rect.width() - expander_rect.width() - action_rect.width(),
             expander_rect.height()
         )
 
@@ -285,13 +285,15 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         # Draw action icon
         if index.data(PLUGIN_ACTIONS_ROLE):
             action_icon = get_pixmap("adn")
-            icon_size = action_rect.height() - 2  # Size of the action icon
+            icon_size = action_rect.height() - 2
             action_icon_size = QtCore.QSize(icon_size, icon_size)
-            action_icon = action_icon.scaled(action_icon_size, QtCore.Qt.KeepAspectRatio,
-                                             QtCore.Qt.SmoothTransformation)
+            action_icon = action_icon.scaled(action_icon_size,
+                                             QtCore.Qt.KeepAspectRatio,
+                                             QtCore.Qt.SmoothTransformation
+                                             )
 
             # Adjust label_rect to avoid overlap with action icon
-            label_rect.setWidth(label_rect.width() - action_rect.width() - 10)  # Added margin
+            label_rect.setWidth(label_rect.width() - action_rect.width() - 10)
 
             # Draw the action icon inside the defined frame
             action_icon_point = QtCore.QPoint(
