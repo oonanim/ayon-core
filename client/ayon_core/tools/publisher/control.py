@@ -174,8 +174,14 @@ class PublishReportMaker:
             "logs": self._extract_instance_log_items(result),
             "process_time": result["duration"]
         })
-        self._current_plugin_data["errored"] = result.get("is_validation_error", False)
-        self._current_plugin_data["is_blocking"] = result.get("is_blocking", False)
+        self._current_plugin_data["errored"] = result.get(
+            "is_validation_error",
+            False
+        )
+        self._current_plugin_data["is_blocking"] = result.get(
+            "is_blocking",
+            False
+        )
 
     def add_action_result(self, action, result):
         """Add result of single action."""
@@ -382,11 +388,23 @@ class PublishPluginsProxy:
             self._plugins_by_id[plugin_id] = plugin
 
     def set_plugin_actions(self, plugin_id, exception):
+        """ Assign active actions to a plugin.
+
+        Filters and assigns actions that are active for a given plugin,
+        considering the current exception.
+        The actions are stored and indexed by their IDs for quick access.
+
+        Args:
+            plugin_id (str): The identifier for the plugin.
+            exception (Type[Exception]): The exception that might influence
+            action activation.
+        """
         action_ids = []
         actions_by_id = {}
 
         actions = getattr(self._plugins_by_id[plugin_id], "actions", [])
-        filtered_actions = self._filter_plugin_active_actions(actions, exception)
+        filtered_actions = self._filter_plugin_active_actions(actions,
+                                                              exception)
         for action in filtered_actions:
             action_id = action.id
             action_ids.append(action_id)
@@ -448,15 +466,46 @@ class PublishPluginsProxy:
 
     @staticmethod
     def _filter_plugin_active_actions(actions, exception):
-        """Get active actions based on the plugin's error status."""
+        """ Filters active actions based on the plugin's specified conditions.
+
+        Determines which actions are active depending on the plugin's
+        specified conditions and the type and severity of the exception.
+
+        Args:
+            actions (List[Action]): A list of Action objects to filter.
+            exception (Type[Exception]): The exception raised during plugin
+            execution.
+
+        Returns:
+            List[Action]: A list of actions that are active based on the
+            specified conditions.
+
+        Raises:
+            None
+        """
         plugin_errored = isinstance(exception, PublishValidationError)
         error_is_blocking = getattr(exception, "is_blocking", False)
 
         def is_action_active(action):
+            """ Evaluate if an action should be activated.
+
+            Checks whether an action meets its specified conditions for
+            activation, which can include being always active, or active in
+            response to specific states of the plugin.
+
+            Args:
+                action (Action): The action to evaluate.
+
+            Returns:
+                bool: Indicates if the action meets the activation criteria.
+            """
             return action.active and (
                     action.on == "all" or
                     (action.on == "failedOrWarning" and plugin_errored) or
-                    (action.on == "failed" and (plugin_errored and error_is_blocking))
+                    (action.on == "failed" and
+                     (
+                             plugin_errored and error_is_blocking)
+                     )
             )
 
         return [action for action in actions if is_action_active(action)]
@@ -610,8 +659,10 @@ class PublishValidationErrorsReport:
         error_items (List[ValidationErrorItem]): List of validation errors.
         plugin_action_items (Dict[str, PublishPluginActionItem]): Action items
             by plugin id.
-        has_blocking_errors (bool): Indicates whether there are blocking errors.
-        has_non_blocking_errors (bool): Indicates whether there are non-blocking errors.
+        has_blocking_errors (bool): Indicates whether there are
+            blocking errors.
+        has_non_blocking_errors (bool): Indicates whether there are
+            non-blocking errors.
     """
 
     def __init__(self,
@@ -803,7 +854,11 @@ class PublishValidationErrors:
         plugin_id = self._plugins_proxy.get_plugin_id(plugin)
         self._ensure_validation_title(plugin, error)
 
-        error_item = ValidationErrorItem.from_result(plugin_id, error, instance)
+        error_item = ValidationErrorItem.from_result(
+            plugin_id,
+            error,
+            instance
+        )
         self._error_items.append(error_item)
 
         if error.is_blocking:
@@ -812,14 +867,17 @@ class PublishValidationErrors:
             self._non_blocking_errors.append(error_item)
 
         if plugin_id not in self._plugin_action_items:
-            plugin_actions = self._plugins_proxy.get_plugin_action_items(plugin_id)
+            plugin_actions = self._plugins_proxy.get_plugin_action_items(
+                plugin_id
+            )
             self._plugin_action_items[plugin_id] = plugin_actions
 
     @staticmethod
     def _ensure_validation_title(plugin, validation_report_item):
         """Ensure that the validation report item has a title."""
         if not validation_report_item.title:
-            validation_report_item.title = getattr(plugin, 'label', plugin.__name__)
+            validation_report_item.title = getattr(plugin, 'label',
+                                                   plugin.__name__)
 
 
 class CreatorType:
@@ -2457,7 +2515,9 @@ class PublisherController(BasePublisherController):
         self._start_publish()
 
     def ignore_non_blocking_errors(self):
-        """Ignore validation non-blocking errors and continue the publishing process."""
+        """ Ignore validation non-blocking errors and continue
+        the publishing process.
+        """
         self._ignore_non_blocking_errors = True
         self._reset_publish()
 
@@ -2465,9 +2525,10 @@ class PublisherController(BasePublisherController):
         if self.publish_is_running:
             self.log.info("Publishing is currently running and will continue.")
         else:
-            self.log.info("Resuming publishing after ignoring non-blocking errors.")
+            self.log.info(
+                "Resuming publishing after ignoring non-blocking errors.")
             if self._btn_clicked == "validate":
-                self.validate()  # or self.publish() depending on context
+                self.validate()
             elif self._btn_clicked == "publish":
                 self.publish()
 
@@ -2735,7 +2796,8 @@ class PublisherController(BasePublisherController):
             result["is_validation_error"] = has_validation_error
 
         self._publish_report.add_result(result)
-        self._publish_report.set_plugin_action_items(self._publish_plugins_proxy.get_plugin_action_items(plugin.id))
+        self._publish_report.set_plugin_action_items(
+            self._publish_plugins_proxy.get_plugin_action_items(plugin.id))
 
         self._publish_next_process()
 
