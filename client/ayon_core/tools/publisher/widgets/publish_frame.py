@@ -374,8 +374,12 @@ class PublishFrame(QtWidgets.QWidget):
         # Determine UI control states based on the controller's state
         has_crashed = self._controller.publish_has_crashed
         has_validated = self._controller.publish_has_validated
-        has_errors = self._controller.publish_has_validation_errors
-        has_blocking_errors = self._controller.publish_has_validation_blocking_errors
+        has_errors = (
+            self._controller.publish_has_validation_errors
+        )
+        has_blocking_errors = (
+            self._controller.publish_has_validation_blocking_errors
+        )
         has_finished = self._controller.publish_has_finished
 
         # Set button enabled states and visibility
@@ -430,9 +434,11 @@ class PublishFrame(QtWidgets.QWidget):
         self._set_success_property(2)
 
     def _set_validation_non_blocking_errors(self):
-        self._set_main_label("Your publish has passed studio validations with non-blocking errors.")
+        self._set_main_label("Your publish has passed studio validations with "
+                             "non-blocking errors.")
         self._message_label_top.setText(
-            "Please review the errors above and decide whether to address or ignore them.")
+            "Please review the errors above and decide whether "
+            "to address or ignore them.")
         self._set_success_property(3)
 
     def _set_finished(self):
