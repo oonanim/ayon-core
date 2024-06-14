@@ -659,22 +659,22 @@ class PublishValidationErrorsReport:
         error_items (List[ValidationErrorItem]): List of validation errors.
         plugin_action_items (Dict[str, PublishPluginActionItem]): Action items
             by plugin id.
-        has_blocking_errors (bool): Indicates whether there are
-            blocking errors.
-        has_non_blocking_errors (bool): Indicates whether there are
-            non-blocking errors.
     """
 
-    def __init__(self,
-                 error_items,
-                 plugin_action_items,
-                 has_blocking_errors,
-                 has_non_blocking_errors
-                 ):
+    def __init__(self, error_items, plugin_action_items):
         self._error_items = error_items
         self._plugin_action_items = plugin_action_items
-        self.has_blocking_errors = has_blocking_errors
-        self.has_non_blocking_errors = has_non_blocking_errors
+        self.has_blocking_errors = False
+        self.has_non_blocking_errors = False
+
+        for error in self._error_items:
+            if error.is_blocking:
+                self.has_blocking_errors = True
+            else:
+                self.has_non_blocking_errors = True
+
+            if self.has_blocking_errors and self.has_non_blocking_errors:
+                break
 
     def __iter__(self):
         for item in self._error_items:
@@ -744,9 +744,7 @@ class PublishValidationErrorsReport:
 
         return {
             "error_items": error_items,
-            "plugin_action_items": plugin_action_items,
-            "has_blocking_errors": self.has_blocking_errors,
-            "has_non_blocking_errors": self.has_non_blocking_errors
+            "plugin_action_items": plugin_action_items
         }
 
     @classmethod
@@ -769,15 +767,7 @@ class PublishValidationErrorsReport:
             PublishPluginActionItem.from_data(action_item)
             for action_item in data["plugin_action_items"]
         ]
-
-        has_blocking_errors = data["has_blocking_errors"]
-        has_non_blocking_errors = data["has_non_blocking_errors"]
-
-        return cls(error_items,
-                   plugin_action_items,
-                   has_blocking_errors,
-                   has_non_blocking_errors
-                   )
+        return cls(error_items, plugin_action_items)
 
 
 class PublishValidationErrors:
@@ -786,8 +776,6 @@ class PublishValidationErrors:
     def __init__(self):
         self._plugins_proxy = None
         self._error_items = []
-        self._blocking_errors = []
-        self._non_blocking_errors = []
         self._plugin_action_items = {}
 
     def __bool__(self):
@@ -799,18 +787,6 @@ class PublishValidationErrors:
 
         return bool(self._error_items)
 
-    @property
-    def has_blocking_errors(self):
-        """At least one blocking error was added."""
-
-        return bool(self._blocking_errors)
-
-    @property
-    def has_non_blocking_errors(self):
-        """At least one non-blocking error was added."""
-
-        return bool(self._non_blocking_errors)
-
     def reset(self, plugins_proxy):
         """Reset object to default state.
 
@@ -821,8 +797,6 @@ class PublishValidationErrors:
 
         self._plugins_proxy = plugins_proxy
         self._error_items = []
-        self._blocking_errors = []
-        self._non_blocking_errors = []
         self._plugin_action_items = {}
 
     def create_report(self):
@@ -834,10 +808,7 @@ class PublishValidationErrors:
         """
 
         return PublishValidationErrorsReport(
-            self._error_items,
-            self._plugin_action_items,
-            self.has_blocking_errors,
-            self.has_non_blocking_errors
+            self._error_items, self._plugin_action_items
         )
 
     def add_error(self, plugin, error, instance):
@@ -852,32 +823,23 @@ class PublishValidationErrors:
 
         # Make sure the cached report is cleared
         plugin_id = self._plugins_proxy.get_plugin_id(plugin)
-        self._ensure_validation_title(plugin, error)
+        if not error.title:
+            if hasattr(plugin, "label") and plugin.label:
+                plugin_label = plugin.label
+            else:
+                plugin_label = plugin.__name__
+            error.title = plugin_label
 
-        error_item = ValidationErrorItem.from_result(
-            plugin_id,
-            error,
-            instance
+        self._error_items.append(
+            ValidationErrorItem.from_result(plugin_id, error, instance)
         )
-        self._error_items.append(error_item)
+        if plugin_id in self._plugin_action_items:
+            return
 
-        if error.is_blocking:
-            self._blocking_errors.append(error_item)
-        else:
-            self._non_blocking_errors.append(error_item)
-
-        if plugin_id not in self._plugin_action_items:
-            plugin_actions = self._plugins_proxy.get_plugin_action_items(
-                plugin_id
-            )
-            self._plugin_action_items[plugin_id] = plugin_actions
-
-    @staticmethod
-    def _ensure_validation_title(plugin, validation_report_item):
-        """Ensure that the validation report item has a title."""
-        if not validation_report_item.title:
-            validation_report_item.title = getattr(plugin, 'label',
-                                                   plugin.__name__)
+        plugin_actions = self._plugins_proxy.get_plugin_action_items(
+            plugin_id
+        )
+        self._plugin_action_items[plugin_id] = plugin_actions
 
 
 class CreatorType:
@@ -2748,8 +2710,18 @@ class PublisherController(BasePublisherController):
         self.publish_progress = self.publish_max_progress
         yield MainThreadItem(self.stop_publish)
 
+    @staticmethod
+    def _set_error_title_if_missing(plugin, error):
+        """Ensure that the validation report item has a title."""
+        if not error.title:
+            error.title = getattr(plugin, 'label',
+                                  plugin.__name__)
+
     def _add_validation_error(self, result: dict) -> None:
+        self._set_error_title_if_missing(result["plugin"], result["error"])
         if not result["is_blocking"] and self._ignore_non_blocking_errors:
+            self.log.info(
+                f"Ignoring non-blocking error: {result['error'].title}")
             return
 
         self.publish_has_validation_errors = True
