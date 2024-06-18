@@ -2549,6 +2549,30 @@ class PublisherController(BasePublisherController):
 
         self.emit_card_message("Action finished.")
 
+    #TODO: Test the _is_interactive method in both interactive and batch modes.
+    @property
+    def _is_interactive(self):
+        """Check for Interactive Mode
+
+        Determine if the script is running in interactive mode
+        (as opposed to batch mode) based on the host application.
+        """
+
+        host = os.getenv('AYON_HOST_NAME')
+
+        if host is None:
+            raise EnvironmentError(
+                "Host environment variable 'AYON_HOST_NAME' is not set")
+        elif host == 'maya':
+            import maya.cmds
+            return not maya.cmds.about(query=True, batch=True)
+        elif host == 'houdini':
+            import hou
+            return hou.isUIAvailable()
+        else:
+            raise ValueError(f"Unknown host environment: {host}")
+
+
     def _publish_next_process(self):
         # Validations of progress before using iterator
         # - same conditions may be inside iterator but they may be used
@@ -2556,10 +2580,26 @@ class PublisherController(BasePublisherController):
 
         # There are validation errors and validation is passed
         # - can't do any progree
-        if (
-            self.publish_has_validated
-            and self.publish_has_validation_errors
-        ):
+
+        # TODO: Test the _is_interactive method in both
+        #  interactive and batch modes.
+        # Determine the conditions to stop the publish process depending
+        # on whether the mode is interactive or non-interactive
+        if self._is_interactive:
+            # In interactive mode, stop for any validation
+            # errors if validation has passed
+            stop_publish_conditions = (
+                    self.publish_has_validated
+                    and self.publish_has_validation_errors
+            )
+        else:
+            # In batch mode, stop for blocking validation
+            # errors only if validation has passed
+            stop_publish_conditions = (
+                    self.publish_has_validated
+                    and self.publish_has_validation_blocking_errors
+            )
+        if stop_publish_conditions:
             item = MainThreadItem(self.stop_publish)
 
         # Any unexpected error happened
@@ -2632,12 +2672,20 @@ class PublisherController(BasePublisherController):
             if self._publish_up_validation and self.publish_has_validated:
                 yield MainThreadItem(self.stop_publish)
 
+            # TODO: Test the _is_interactive method in both
+            #  interactive and batch modes.
             # Stop if validation is over and validation errors happened
-            if (
-                self.publish_has_validated
-                and self.publish_has_validation_errors
-            ):
-                yield MainThreadItem(self.stop_publish)
+            if self.publish_has_validated:
+                if self._is_interactive:
+                    # In interactive mode, stop publish for
+                    # any validation errors
+                    if self.publish_has_validation_errors:
+                        yield MainThreadItem(self.stop_publish)
+                else:
+                    # In batch mode, stop publish for
+                    # blocking validation errors only
+                    if self.publish_has_validation_blocking_errors:
+                        yield MainThreadItem(self.stop_publish)
 
             # Add plugin to publish report
             self._publish_report.add_plugin_iter(
