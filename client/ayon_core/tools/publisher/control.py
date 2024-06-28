@@ -508,7 +508,7 @@ class PublishPluginsProxy:
                      )
             )
 
-        return [action for action in actions if is_action_active(action)]
+        return list(filter(is_action_active, actions))
 
 
 class PublishPluginActionItem:
@@ -2569,9 +2569,11 @@ class PublisherController(BasePublisherController):
         elif host == 'houdini':
             import hou
             return hou.isUIAvailable()
+        elif host == 'blender':
+            import bpy
+            return not bpy.app.background
         else:
             raise ValueError(f"Unknown host environment: {host}")
-
 
     def _publish_next_process(self):
         # Validations of progress before using iterator
