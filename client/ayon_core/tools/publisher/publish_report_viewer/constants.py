@@ -8,6 +8,8 @@ ITEM_ERRORED_ROLE = QtCore.Qt.UserRole + 4
 PLUGIN_SKIPPED_ROLE = QtCore.Qt.UserRole + 5
 PLUGIN_PASSED_ROLE = QtCore.Qt.UserRole + 6
 INSTANCE_REMOVED_ROLE = QtCore.Qt.UserRole + 7
+PLUGIN_ACTIONS_ROLE = QtCore.Qt.UserRole + 8
+ITEM_BLOCKING_ROLE = QtCore.Qt.UserRole + 9
 
 
 __all__ = (
@@ -16,5 +18,8 @@ __all__ = (
     "ITEM_LABEL_ROLE",
     "ITEM_ERRORED_ROLE",
     "PLUGIN_SKIPPED_ROLE",
-    "INSTANCE_REMOVED_ROLE"
+    "INSTANCE_REMOVED_ROLE",
+    "PLUGIN_PASSED_ROLE",
+    "PLUGIN_ACTIONS_ROLE",
+    "ITEM_BLOCKING_ROLE",
 )

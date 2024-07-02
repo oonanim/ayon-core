@@ -92,7 +92,7 @@
             }
         },
         "publisher": {
-            "error": "#AA5050",
+            "error": "#D35356",
             "crash": "#FF6432",
             "success": "#458056",
             "warning": "#ffc671",
@@ -105,6 +105,13 @@
                 "bg-expander": "#2C313A",
                 "bg-expander-hover": "#2d6c9f",
                 "bg-expander-selected-hover": "#3784c5"
+            },
+            "log-level": {
+                "debug": "#ff66e8",
+                "info": "#66abff",
+                "warning": "#ffba66",
+                "error": "#ff4d58",
+                "critical": "#ff4f75"
             }
         },
         "settings": {

@@ -40,11 +40,12 @@ class PublishValidationError(Exception):
             to use Markdown syntax.
     """
 
-    def __init__(self, message, title=None, description=None, detail=None):
+    def __init__(self, message, title=None, description=None, detail=None, is_blocking=True):
         self.message = message
         self.title = title
         self.description = description or message
         self.detail = detail
+        self.is_blocking = is_blocking
         super(PublishValidationError, self).__init__(message)
 
 

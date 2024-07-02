@@ -8,6 +8,7 @@ from .widgets import (
     ResetBtn,
     StopBtn,
     ValidateBtn,
+    IgnoreBtn,
     PublishBtn,
     CreateNextPageOverlay,
 )

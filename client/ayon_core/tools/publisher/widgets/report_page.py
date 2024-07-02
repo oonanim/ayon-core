@@ -220,12 +220,6 @@ class ValidateActionsWidget(QtWidgets.QFrame):
 
         plugin_action_items = error_info["plugin_action_items"]
         for plugin_action_item in plugin_action_items:
-            if not plugin_action_item.active:
-                continue
-
-            if plugin_action_item.on_filter not in ("failed", "all"):
-                continue
-
             action_id = plugin_action_item.action_id
             self._actions_mapping[action_id] = plugin_action_item
 
@@ -266,6 +260,82 @@ class ValidationErrorInstanceList(QtWidgets.QListView):
         return result
 
 
+class ValidateErrorIconFrame(QtWidgets.QFrame):
+    """Draw log item icon next to message.
+
+    Todos:
+        Paint event could be slow, maybe we could cache the image into pixmaps
+            so each item does not have to redraw it again.
+    """
+
+    log_level_colors = get_objected_colors("publisher", "log-level")
+
+    validation_error_color = log_level_colors["error"].get_qcolor()
+    validation_warning_color = log_level_colors["warning"].get_qcolor()
+
+    _validation_error_pix = None
+    _validation_warning_pix = None
+
+    def __init__(self, parent, is_blocking, icon_size):
+        super(ValidateErrorIconFrame, self).__init__(parent)
+
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+
+        self._is_blocking = is_blocking
+        self._icon_size = icon_size
+
+    @classmethod
+    def get_validation_error_icon(cls):
+        if cls._validation_error_pix is None:
+            cls._validation_error_pix = get_pixmap("error")
+        return cls._validation_error_pix
+
+    @classmethod
+    def get_validation_warning_icon(cls):
+        if cls._validation_warning_pix is None:
+            cls._validation_warning_pix = get_pixmap("warning")
+        return cls._validation_warning_pix
+
+    def minimumSizeHint(self):
+        fm = self.fontMetrics()
+        size = fm.height()
+        return QtCore.QSize(size, size)
+
+    def paintEvent(self, event):
+        # Initialize a QPainter for the current widget
+        painter = QtGui.QPainter(self)
+        # Set rendering hints for antialiasing and smooth pixmap transformations
+        painter.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.SmoothPixmapTransform)
+        # Disable drawing of the pen (no outlines will be drawn)
+        painter.setPen(QtCore.Qt.NoPen)
+
+        # Set a default background color (white), used if no icon is drawn
+        color = QtGui.QColor(255, 255, 255)  # white by default
+        painter.setBrush(color)
+
+        # Calculate the internal drawing rectangle, smaller by 1 pixel margin
+        rect = self.rect()
+        new_size = min(rect.width(), rect.height())
+        new_rect = QtCore.QRect(1, 1, new_size - 2, new_size - 2)
+
+        # Determine the icon to use based on log state
+        report_item_icon = None
+        if self._is_blocking:
+            color = self.validation_error_color
+            report_item_icon = self.get_validation_error_icon()
+        else:
+            color = self.validation_warning_color
+            report_item_icon = self.get_validation_warning_icon()
+        report_item_icon = change_pixmap_color(report_item_icon, color)
+        # Scale the icon to fit within the new rectangle while maintaining aspect ratio
+        scaled_log_icon = report_item_icon.scaled(new_rect.size(), QtCore.Qt.KeepAspectRatio,
+                                                  QtCore.Qt.SmoothTransformation)
+        painter.drawPixmap(new_rect, scaled_log_icon)
+
+        # Finalize painting by ending the QPainter object
+        painter.end()
+
+
 class ValidationErrorTitleWidget(QtWidgets.QWidget):
     """Title of validation error.
 
@@ -296,9 +366,19 @@ class ValidationErrorTitleWidget(QtWidgets.QWidget):
 
         label_widget = QtWidgets.QLabel(error_info["title"], title_frame)
 
+        is_blocking = error_info["error_items"][-1].is_blocking
+
+        # Icon display setup
+        icon_size = 24
+        icon_label = ValidateErrorIconFrame(self, is_blocking, icon_size)
+        icon_label.setFixedSize(icon_size, icon_size)
+
+        # Layout configuration
         title_frame_layout = QtWidgets.QHBoxLayout(title_frame)
-        title_frame_layout.addWidget(label_widget, 1)
-        title_frame_layout.addWidget(toggle_instance_btn, 0)
+        title_frame_layout.addWidget(icon_label)  # Icon added here
+        title_frame_layout.addSpacing(10)  # Space between icon and text
+        title_frame_layout.addWidget(label_widget, 1)  # Label takes up remaining space
+        title_frame_layout.addWidget(toggle_instance_btn)  # Button on the far right
 
         instances_model = QtGui.QStandardItemModel()
 
@@ -529,7 +609,7 @@ class ValidationErrorsView(QtWidgets.QWidget):
         """Set errors into context and created titles.
 
         Args:
-            validation_error_report (PublishValidationErrorsReport): Report
+            grouped_error_items (PublishValidationErrorsReport): Report
                 with information about validation errors and publish plugin
                 actions.
         """
@@ -608,6 +688,7 @@ class _InstanceItem:
         exists,
         logs,
         errored,
+        is_blocking,
         warned
     ):
         self.id = instance_id
@@ -618,6 +699,7 @@ class _InstanceItem:
         self.exists = exists
         self.logs = logs
         self.errored = errored
+        self.is_blocking = is_blocking
         self.warned = warned
 
     def __eq__(self, other):
@@ -667,8 +749,7 @@ class _InstanceItem:
 
     @classmethod
     def from_report(cls, instance_id, instance_data, logs):
-        errored, warned = cls.extract_basic_log_info(logs)
-
+        errored, is_blocking, warned = cls.extract_basic_log_info(logs)
         return cls(
             instance_id,
             instance_data["creator_identifier"],
@@ -678,12 +759,13 @@ class _InstanceItem:
             instance_data["exists"],
             logs,
             errored,
-            warned,
+            is_blocking,
+            warned
         )
 
     @classmethod
     def create_context_item(cls, context_label, logs):
-        errored, warned = cls.extract_basic_log_info(logs)
+        errored, is_blocking, warned = cls.extract_basic_log_info(logs)
         return cls(
             CONTEXT_ID,
             None,
@@ -693,24 +775,26 @@ class _InstanceItem:
             True,
             logs,
             errored,
+            is_blocking,
             warned
         )
 
     @staticmethod
     def extract_basic_log_info(logs):
-        warned = False
-        errored = False
+        errored, is_blocking, warned = False, False, False
         for log in logs:
             if log["type"] == "error":
                 errored = True
+                if log["is_blocking"]:
+                    is_blocking = True
             elif log["type"] == "record":
                 level_no = log["levelno"]
                 if level_no and level_no >= logging.WARNING:
                     warned = True
 
-            if warned and errored:
+            if errored and is_blocking and warned:
                 break
-        return errored, warned
+        return errored, is_blocking, warned
 
 
 class FamilyGroupLabel(QtWidgets.QWidget):
@@ -751,9 +835,11 @@ class PublishInstanceCardWidget(BaseClickableFrame):
         icon_widget.setObjectName("ProductTypeIconLabel")
 
         label_widget = QtWidgets.QLabel(instance.label, self)
-
         if instance.errored:
-            state_pix = self.get_error_pix()
+            if instance.is_blocking:
+                state_pix = self.get_error_pix()
+            else:
+                state_pix = self.get_non_blocking_error_pix()
         elif instance.warned:
             state_pix = self.get_warning_pix()
         elif publish_finished:
@@ -790,6 +876,10 @@ class PublishInstanceCardWidget(BaseClickableFrame):
             get_image("error"),
             publisher_colors["error"].get_qcolor()
         )
+        cls._non_blocking_error_pix = paint_image_with_color(
+            get_image("warning"),
+            publisher_colors["warning"].get_qcolor()
+        )
         cls._success_pix = paint_image_with_color(
             get_image("success"),
             publisher_colors["success"].get_qcolor()
@@ -810,6 +900,12 @@ class PublishInstanceCardWidget(BaseClickableFrame):
         if cls._error_pix is None:
             cls._prepare_pixes()
         return cls._error_pix
+
+    @classmethod
+    def get_non_blocking_error_pix(cls):
+        if cls._non_blocking_error_pix is None:
+            cls._prepare_pixes()
+        return cls._non_blocking_error_pix
 
     @classmethod
     def get_success_pix(cls):
@@ -1026,34 +1122,59 @@ class LogIconFrame(QtWidgets.QFrame):
         Paint event could be slow, maybe we could cache the image into pixmaps
             so each item does not have to redraw it again.
     """
+    log_level_colors = get_objected_colors("publisher", "log-level")
 
-    info_color = QtGui.QColor("#ffffff")
-    error_color = QtGui.QColor("#ff4a4a")
+    validation_error_color = log_level_colors["error"].get_qcolor()
+    validation_warning_color = log_level_colors["warning"].get_qcolor()
+
     level_to_color = dict((
-        (10, QtGui.QColor("#ff66e8")),
-        (20, QtGui.QColor("#66abff")),
-        (30, QtGui.QColor("#ffba66")),
-        (40, QtGui.QColor("#ff4d58")),
-        (50, QtGui.QColor("#ff4f75")),
+        (10, log_level_colors["debug"].get_qcolor()),
+        (20, log_level_colors["info"].get_qcolor()),
+        (30, log_level_colors["warning"].get_qcolor()),
+        (40, log_level_colors["error"].get_qcolor()),
+        (50, log_level_colors["critical"].get_qcolor()),
     ))
     _error_pix = None
     _validation_error_pix = None
+    _validation_warning_pix = None
+    _validation_info_pix = None
 
-    def __init__(self, parent, log_type, log_level, is_validation_error):
+    def __init__(self, parent, log, log_level):
         super(LogIconFrame, self).__init__(parent)
 
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self._is_record = log_type == "record"
-        self._is_error = log_type == "error"
-        self._is_validation_error = bool(is_validation_error)
+        self._is_record = log["type"] == "record"
+        self._is_error = log["type"] == "error"
+
+        self._is_validation_error = bool(log.get("is_validation_error", False))
+        self._is_blocking = bool(log.get("is_blocking", False))
+
+        self._is_log_debug = bool(log.get("is_debug", False))
+        self._is_log_info = bool(log.get("is_info", False))
+        self._is_log_warning = bool(log.get("is_warning", False))
+        self._is_log_error = bool(log.get("is_error", False))
+        self._is_log_critical = bool(log.get("is_critical", False))
+
         self._log_color = self.level_to_color.get(log_level)
 
     @classmethod
     def get_validation_error_icon(cls):
         if cls._validation_error_pix is None:
-            cls._validation_error_pix = get_pixmap("warning")
+            cls._validation_error_pix = get_pixmap("error")
         return cls._validation_error_pix
+
+    @classmethod
+    def get_validation_warning_icon(cls):
+        if cls._validation_warning_pix is None:
+            cls._validation_warning_pix = get_pixmap("warning")
+        return cls._validation_warning_pix
+
+    @classmethod
+    def get_checked_icon(cls):
+        if cls._validation_info_pix is None:
+            cls._validation_info_pix = get_pixmap("checked")
+        return cls._validation_info_pix
 
     @classmethod
     def get_error_icon(cls):
@@ -1073,29 +1194,82 @@ class LogIconFrame(QtWidgets.QFrame):
             | QtGui.QPainter.SmoothPixmapTransform
         )
         painter.setPen(QtCore.Qt.NoPen)
+
+        # Set a default background color (white), used if no icon is drawn
+        color = QtGui.QColor("#ffffff")  # white by default
+        painter.setBrush(color)
+
+        # Calculate the internal drawing rectangle, smaller by 1 pixel margin
         rect = self.rect()
         new_size = min(rect.width(), rect.height())
         new_rect = QtCore.QRect(1, 1, new_size - 2, new_size - 2)
-        if self._is_error:
-            if self._is_validation_error:
-                error_icon = self.get_validation_error_icon()
-            else:
-                error_icon = self.get_error_icon()
-            scaled_error_icon = error_icon.scaled(
-                new_rect.size(),
-                QtCore.Qt.KeepAspectRatio,
-                QtCore.Qt.SmoothTransformation
-            )
-            painter.drawPixmap(new_rect, scaled_error_icon)
 
+        # Determine the icon to use based on log state
+        log_icon, color = self._determine_icon_and_color()
+
+        # Draw the icon or an ellipse if no icon is present
+        if log_icon:
+            log_icon = change_pixmap_color(log_icon, color)
+            # Scale the icon to fit within the new rectangle while maintaining aspect ratio
+            scaled_log_icon = log_icon.scaled(new_rect.size(), QtCore.Qt.KeepAspectRatio,
+                                              QtCore.Qt.SmoothTransformation)
+            painter.drawPixmap(new_rect, scaled_log_icon)
         else:
-            if self._is_record:
-                color = self._log_color
-            else:
-                color = QtGui.QColor(255, 255, 255)
+            # Apply the brush color only if there's no icon, then draw an ellipse
             painter.setBrush(color)
             painter.drawEllipse(new_rect)
+
+        # Finalize painting by ending the QPainter object
         painter.end()
+
+    def _determine_icon_and_color(self):
+        """
+        Determines the appropriate icon and color based on the current log state.
+
+        This method checks various flags set on the object to decide which icon and
+        what color should be used for rendering. The method is designed to handle different
+        types of log states such as errors and records. Each state has subcategories
+        that further specify the exact icon and color to use.
+
+        Returns:
+            tuple: A tuple containing the icon (QPixmap) and the color (QColor) to be used.
+        """
+        # Default color is white
+        log_icon, color = None, QtGui.QColor("#ffffff")
+
+        # Handling different types of error states
+        if self._is_error:
+            if self._is_validation_error:
+                if self._is_blocking:
+                    color = self.validation_error_color  # Use specific error color
+                    log_icon = self.get_validation_error_icon()
+                else:
+                    color = self.validation_warning_color  # Use specific warning color
+                    log_icon = self.get_validation_warning_icon()
+            else:
+                log_icon = self.get_error_icon()  # Use generic error icon
+
+        # Handling different types of record states
+        elif self._is_record:
+            color = self._log_color  # Use log-specific color
+            log_icon = self.get_checked_icon()
+
+        return log_icon, color
+
+
+def change_pixmap_color(pixmap, new_color):
+    from qtpy.QtGui import QPixmap, QPainter, QColor, QIcon
+
+    colored_pixmap = QPixmap(pixmap.size())
+    colored_pixmap.fill(QtCore.Qt.transparent)
+
+    painter = QPainter(colored_pixmap)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+    painter.fillRect(colored_pixmap.rect(), new_color)
+    painter.end()
+
+    return colored_pixmap
 
 
 class LogItemWidget(QtWidgets.QWidget):
@@ -1112,7 +1286,7 @@ class LogItemWidget(QtWidgets.QWidget):
 
         type_flag, level_n = self._get_log_info(log)
         icon_label = LogIconFrame(
-            self, log["type"], level_n, log.get("is_validation_error"))
+            self, log, level_n)
         message_label = QtWidgets.QLabel(log["msg"].rstrip(), self)
         message_label.setObjectName("PublishLogMessage")
         message_label.setTextInteractionFlags(

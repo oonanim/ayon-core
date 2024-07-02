@@ -138,14 +138,29 @@ class PublishReportMaker:
             "order": plugin.order,
             "targets": list(plugin.targets),
             "instances_data": [],
+            "action_items": [],
             "actions_data": [],
             "skipped": False,
-            "passed": False
+            "passed": False,
+            "errored": False,
+            "is_blocking": False,
         }
 
     def set_plugin_skipped(self):
         """Set that current plugin has been skipped."""
         self._current_plugin_data["skipped"] = True
+
+    def set_plugin_action_items(self, action_items):
+        """Set action items for the current plugin.
+
+        This method updates the `action_items` attribute of the currently
+        processed plugin with the provided action items.
+
+        Args:
+            action_items (list): A list of action items to be associated with
+                                 the current plugin.
+        """
+        self._current_plugin_data["action_items"] = action_items
 
     def add_result(self, result):
         """Handle result of one plugin and it's instance."""
@@ -159,6 +174,14 @@ class PublishReportMaker:
             "logs": self._extract_instance_log_items(result),
             "process_time": result["duration"]
         })
+        self._current_plugin_data["errored"] = result.get(
+            "is_validation_error",
+            False
+        )
+        self._current_plugin_data["is_blocking"] = result.get(
+            "is_blocking",
+            False
+        )
 
     def add_action_result(self, action, result):
         """Add result of single action."""
@@ -281,8 +304,20 @@ class PublishReportMaker:
             except Exception:
                 msg = str(record.msg)
 
+            levels = {
+                logging.DEBUG: "is_debug",
+                logging.INFO: "is_info",
+                logging.WARNING: "is_warning",
+                logging.ERROR: "is_error",
+                logging.CRITICAL: "is_critical"
+            }
+
+            log_levels = {level: False for level in levels.values()}
+            log_levels[levels.get(record.levelno, "")] = True
+
             output.append({
                 "type": "record",
+                **log_levels,
                 "msg": msg,
                 "name": record.name,
                 "lineno": record.lineno,
@@ -310,9 +345,11 @@ class PublishReportMaker:
 
             # Action result does not have 'is_validation_error'
             is_validation_error = result.get("is_validation_error", False)
+            is_blocking = result.get("is_blocking", False)
             output.append({
                 "type": "error",
                 "is_validation_error": is_validation_error,
+                "is_blocking": is_blocking,
                 "msg": msg,
                 "filename": str(fname),
                 "lineno": str(line_no),
@@ -342,27 +379,39 @@ class PublishPluginsProxy:
     """
 
     def __init__(self, plugins):
-        plugins_by_id = {}
-        actions_by_plugin_id = {}
-        action_ids_by_plugin_id = {}
+        self._plugins_by_id = {}
+        self._actions_by_plugin_id = {}
+        self._action_ids_by_plugin_id = {}
+
         for plugin in plugins:
             plugin_id = plugin.id
-            plugins_by_id[plugin_id] = plugin
+            self._plugins_by_id[plugin_id] = plugin
 
-            action_ids = []
-            actions_by_id = {}
-            action_ids_by_plugin_id[plugin_id] = action_ids
-            actions_by_plugin_id[plugin_id] = actions_by_id
+    def set_plugin_actions(self, plugin_id, exception):
+        """ Assign active actions to a plugin.
 
-            actions = getattr(plugin, "actions", None) or []
-            for action in actions:
-                action_id = action.id
-                action_ids.append(action_id)
-                actions_by_id[action_id] = action
+        Filters and assigns actions that are active for a given plugin,
+        considering the current exception.
+        The actions are stored and indexed by their IDs for quick access.
 
-        self._plugins_by_id = plugins_by_id
-        self._actions_by_plugin_id = actions_by_plugin_id
-        self._action_ids_by_plugin_id = action_ids_by_plugin_id
+        Args:
+            plugin_id (str): The identifier for the plugin.
+            exception (Type[Exception]): The exception that might influence
+            action activation.
+        """
+        action_ids = []
+        actions_by_id = {}
+
+        actions = getattr(self._plugins_by_id[plugin_id], "actions", [])
+        filtered_actions = self._filter_plugin_active_actions(actions,
+                                                              exception)
+        for action in filtered_actions:
+            action_id = action.id
+            action_ids.append(action_id)
+            actions_by_id[action_id] = action
+
+        self._action_ids_by_plugin_id[plugin_id] = action_ids
+        self._actions_by_plugin_id[plugin_id] = actions_by_id
 
     def get_action(self, plugin_id, action_id):
         return self._actions_by_plugin_id[plugin_id][action_id]
@@ -414,6 +463,52 @@ class PublishPluginsProxy:
             label,
             icon
         )
+
+    @staticmethod
+    def _filter_plugin_active_actions(actions, exception):
+        """ Filters active actions based on the plugin's specified conditions.
+
+        Determines which actions are active depending on the plugin's
+        specified conditions and the type and severity of the exception.
+
+        Args:
+            actions (List[Action]): A list of Action objects to filter.
+            exception (Type[Exception]): The exception raised during plugin
+            execution.
+
+        Returns:
+            List[Action]: A list of actions that are active based on the
+            specified conditions.
+
+        Raises:
+            None
+        """
+        plugin_errored = isinstance(exception, PublishValidationError)
+        error_is_blocking = getattr(exception, "is_blocking", False)
+
+        def is_action_active(action):
+            """ Evaluate if an action should be activated.
+
+            Checks whether an action meets its specified conditions for
+            activation, which can include being always active, or active in
+            response to specific states of the plugin.
+
+            Args:
+                action (Action): The action to evaluate.
+
+            Returns:
+                bool: Indicates if the action meets the activation criteria.
+            """
+            return action.active and (
+                    action.on == "all" or
+                    (action.on == "failedOrWarning" and plugin_errored) or
+                    (action.on == "failed" and
+                     (
+                             plugin_errored and error_is_blocking)
+                     )
+            )
+
+        return list(filter(is_action_active, actions))
 
 
 class PublishPluginActionItem:
@@ -495,7 +590,8 @@ class ValidationErrorItem:
         context_validation,
         title,
         description,
-        detail
+        detail,
+        is_blocking
     ):
         self.instance_id = instance_id
         self.instance_label = instance_label
@@ -504,6 +600,7 @@ class ValidationErrorItem:
         self.title = title
         self.description = description
         self.detail = detail
+        self.is_blocking = is_blocking
 
     def to_data(self):
         """Serialize object to dictionary.
@@ -520,6 +617,7 @@ class ValidationErrorItem:
             "title": self.title,
             "description": self.description,
             "detail": self.detail,
+            "is_blocking": self.is_blocking,
         }
 
     @classmethod
@@ -546,6 +644,7 @@ class ValidationErrorItem:
             error.title,
             error.description,
             error.detail,
+            error.is_blocking
         )
 
     @classmethod
@@ -565,6 +664,17 @@ class PublishValidationErrorsReport:
     def __init__(self, error_items, plugin_action_items):
         self._error_items = error_items
         self._plugin_action_items = plugin_action_items
+        self.has_blocking_errors = False
+        self.has_non_blocking_errors = False
+
+        for error in self._error_items:
+            if error.is_blocking:
+                self.has_blocking_errors = True
+            else:
+                self.has_non_blocking_errors = True
+
+            if self.has_blocking_errors and self.has_non_blocking_errors:
+                break
 
     def __iter__(self):
         for item in self._error_items:
@@ -1164,6 +1274,17 @@ class AbstractPublisherController(object):
 
     @property
     @abstractmethod
+    def publish_has_validation_blocking_errors(self):
+        """During validation happened at least one validation blocking error.
+
+        Returns:
+            bool: Validation blocking error was raised during validation.
+        """
+
+        pass
+
+    @property
+    @abstractmethod
     def publish_max_progress(self):
         """Get maximum possible progress number.
 
@@ -1325,6 +1446,7 @@ class BasePublisherController(AbstractPublisherController):
         self._publish_has_validated = False
 
         self._publish_has_validation_errors = False
+        self._publish_has_validation_blocking_errors = False
         self._publish_has_crashed = False
         # All publish plugins are processed
         self._publish_has_started = False
@@ -1455,11 +1577,22 @@ class BasePublisherController(AbstractPublisherController):
     def _get_publish_has_validation_errors(self):
         return self._publish_has_validation_errors
 
+    def _get_publish_has_validation_blocking_errors(self):
+        return self._publish_has_validation_blocking_errors
+
     def _set_publish_has_validation_errors(self, value):
         if self._publish_has_validation_errors != value:
             self._publish_has_validation_errors = value
             self._emit_event(
                 "publish.has_validation_errors.changed",
+                {"value": value}
+            )
+
+    def _set_publish_has_validation_blocking_errors(self, value):
+        if self._publish_has_validation_blocking_errors != value:
+            self._publish_has_validation_blocking_errors = value
+            self._emit_event(
+                "publish.has_validation_blocking_errors.changed",
                 {"value": value}
             )
 
@@ -1508,6 +1641,9 @@ class BasePublisherController(AbstractPublisherController):
     publish_has_validation_errors = property(
         _get_publish_has_validation_errors, _set_publish_has_validation_errors
     )
+    publish_has_validation_blocking_errors = property(
+        _get_publish_has_validation_blocking_errors, _set_publish_has_validation_blocking_errors
+    )
     publish_max_progress = property(
         _get_publish_max_progress, _set_publish_max_progress
     )
@@ -1526,6 +1662,7 @@ class BasePublisherController(AbstractPublisherController):
         self.publish_has_validated = False
         self.publish_has_crashed = False
         self.publish_has_validation_errors = False
+        self.publish_has_validation_blocking_errors = False
         self.publish_has_finished = False
 
         self.publish_error_msg = None
@@ -1634,6 +1771,9 @@ class PublisherController(BasePublisherController):
         # Cacher of avalon documents
         self._projects_model = ProjectsModel(self)
         self._hierarchy_model = HierarchyModel(self)
+
+        self._ignore_non_blocking_errors = False
+        self._btn_clicked = None
 
     @property
     def project_name(self):
@@ -2318,6 +2458,7 @@ class PublisherController(BasePublisherController):
         Make sure all changes are saved before method is called (Call
         'save_changes' and check output).
         """
+        self._btn_clicked = "publish"
 
         self._publish_up_validation = False
         self._start_publish()
@@ -2328,11 +2469,30 @@ class PublisherController(BasePublisherController):
         Make sure all changes are saved before method is called (Call
         'save_changes' and check output).
         """
+        self._btn_clicked = "validate"
 
         if self.publish_has_validated:
             return
         self._publish_up_validation = True
         self._start_publish()
+
+    def ignore_non_blocking_errors(self):
+        """ Ignore validation non-blocking errors and continue
+        the publishing process.
+        """
+        self._ignore_non_blocking_errors = True
+        self._reset_publish()
+
+        # Logic to resume publishing, similar to ending validation
+        if self.publish_is_running:
+            self.log.info("Publishing is currently running and will continue.")
+        else:
+            self.log.info(
+                "Resuming publishing after ignoring non-blocking errors.")
+            if self._btn_clicked == "validate":
+                self.validate()
+            elif self._btn_clicked == "publish":
+                self.publish()
 
     def _start_publish(self):
         """Start or continue in publishing."""
@@ -2349,7 +2509,7 @@ class PublisherController(BasePublisherController):
     def _stop_publish(self):
         """Stop or pause publishing."""
         self.publish_is_running = False
-
+        self._ignore_non_blocking_errors = False
         self._emit_event("publish.process.stopped")
 
     def stop_publish(self):
@@ -2389,6 +2549,32 @@ class PublisherController(BasePublisherController):
 
         self.emit_card_message("Action finished.")
 
+    #TODO: Test the _is_interactive method in both interactive and batch modes.
+    @property
+    def _is_interactive(self):
+        """Check for Interactive Mode
+
+        Determine if the script is running in interactive mode
+        (as opposed to batch mode) based on the host application.
+        """
+
+        host = os.getenv('AYON_HOST_NAME')
+
+        if host is None:
+            raise EnvironmentError(
+                "Host environment variable 'AYON_HOST_NAME' is not set")
+        elif host == 'maya':
+            import maya.cmds
+            return not maya.cmds.about(query=True, batch=True)
+        elif host == 'houdini':
+            import hou
+            return hou.isUIAvailable()
+        elif host == 'blender':
+            import bpy
+            return not bpy.app.background
+        else:
+            raise ValueError(f"Unknown host environment: {host}")
+
     def _publish_next_process(self):
         # Validations of progress before using iterator
         # - same conditions may be inside iterator but they may be used
@@ -2396,10 +2582,26 @@ class PublisherController(BasePublisherController):
 
         # There are validation errors and validation is passed
         # - can't do any progree
-        if (
-            self.publish_has_validated
-            and self.publish_has_validation_errors
-        ):
+
+        # TODO: Test the _is_interactive method in both
+        #  interactive and batch modes.
+        # Determine the conditions to stop the publish process depending
+        # on whether the mode is interactive or non-interactive
+        if self._is_interactive:
+            # In interactive mode, stop for any validation
+            # errors if validation has passed
+            stop_publish_conditions = (
+                    self.publish_has_validated
+                    and self.publish_has_validation_errors
+            )
+        else:
+            # In batch mode, stop for blocking validation
+            # errors only if validation has passed
+            stop_publish_conditions = (
+                    self.publish_has_validated
+                    and self.publish_has_validation_blocking_errors
+            )
+        if stop_publish_conditions:
             item = MainThreadItem(self.stop_publish)
 
         # Any unexpected error happened
@@ -2472,12 +2674,20 @@ class PublisherController(BasePublisherController):
             if self._publish_up_validation and self.publish_has_validated:
                 yield MainThreadItem(self.stop_publish)
 
+            # TODO: Test the _is_interactive method in both
+            #  interactive and batch modes.
             # Stop if validation is over and validation errors happened
-            if (
-                self.publish_has_validated
-                and self.publish_has_validation_errors
-            ):
-                yield MainThreadItem(self.stop_publish)
+            if self.publish_has_validated:
+                if self._is_interactive:
+                    # In interactive mode, stop publish for
+                    # any validation errors
+                    if self.publish_has_validation_errors:
+                        yield MainThreadItem(self.stop_publish)
+                else:
+                    # In batch mode, stop publish for
+                    # blocking validation errors only
+                    if self.publish_has_validation_blocking_errors:
+                        yield MainThreadItem(self.stop_publish)
 
             # Add plugin to publish report
             self._publish_report.add_plugin_iter(
@@ -2550,8 +2760,25 @@ class PublisherController(BasePublisherController):
         self.publish_progress = self.publish_max_progress
         yield MainThreadItem(self.stop_publish)
 
-    def _add_validation_error(self, result):
+    @staticmethod
+    def _set_error_title_if_missing(plugin, error):
+        """Ensure that the validation report item has a title."""
+        if not error.title:
+            error.title = getattr(plugin, 'label',
+                                  plugin.__name__)
+
+    def _add_validation_error(self, result: dict) -> None:
+        self._set_error_title_if_missing(result["plugin"], result["error"])
+        if not result["is_blocking"] and self._ignore_non_blocking_errors:
+            self.log.info(
+                f"Ignoring non-blocking error: {result['error'].title}")
+            return
+
         self.publish_has_validation_errors = True
+
+        if result["is_blocking"]:
+            self.publish_has_validation_blocking_errors = True
+
         self._publish_validation_errors.add_error(
             result["plugin"],
             result["error"],
@@ -2564,6 +2791,9 @@ class PublisherController(BasePublisherController):
         )
 
         exception = result.get("error")
+
+        self._publish_plugins_proxy.set_plugin_actions(plugin.id, exception)
+
         if exception:
             has_validation_error = False
             if (
@@ -2571,6 +2801,7 @@ class PublisherController(BasePublisherController):
                 and not self.publish_has_validated
             ):
                 has_validation_error = True
+                result["is_blocking"] = exception.is_blocking
                 self._add_validation_error(result)
 
             else:
@@ -2587,6 +2818,8 @@ class PublisherController(BasePublisherController):
             result["is_validation_error"] = has_validation_error
 
         self._publish_report.add_result(result)
+        self._publish_report.set_plugin_action_items(
+            self._publish_plugins_proxy.get_plugin_action_items(plugin.id))
 
         self._publish_next_process()
 

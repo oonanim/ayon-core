@@ -1,16 +1,20 @@
 import collections
 from qtpy import QtWidgets, QtCore, QtGui
+from ayon_core.tools.publisher.widgets.report_page import ActionButton
+from ayon_core.tools.publisher.widgets.icons import get_pixmap
 from .constants import (
     ITEM_IS_GROUP_ROLE,
     ITEM_ERRORED_ROLE,
     PLUGIN_SKIPPED_ROLE,
     PLUGIN_PASSED_ROLE,
-    INSTANCE_REMOVED_ROLE
+    INSTANCE_REMOVED_ROLE,
+    PLUGIN_ACTIONS_ROLE,
+    ITEM_BLOCKING_ROLE,
 )
 
 colors = {
-    "error": QtGui.QColor("#ff4a4a"),
-    "warning": QtGui.QColor("#ff9900"),
+    "error": QtGui.QColor("#fc565b"),
+    "warning": QtGui.QColor("#FFBA66"),
     "ok": QtGui.QColor("#77AE24"),
     "active": QtGui.QColor("#99CEEE"),
     "idle": QtCore.Qt.white,
@@ -37,6 +41,11 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
     _item_border_size = 1.0 / 7.0
     _group_pix_offset_ratio = 1.0 / 3.0
     _group_pix_stroke_size_ratio = 1.0 / 7.0
+
+    def __init__(self, parent=None, controller=None):
+        super(GroupItemDelegate, self).__init__(parent)
+        self.action_icon_rects = {}
+        self._controller = controller
 
     @classmethod
     def _get_path_stroker(cls):
@@ -118,9 +127,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
     @classmethod
     def _get_icon_color(cls, name):
-        if name == "error":
-            return QtGui.QColor(colors["error"])
-        return QtGui.QColor(QtCore.Qt.white)
+        return QtGui.QColor(colors.get(name, QtCore.Qt.white))
 
     @classmethod
     def _get_icon(cls, name, size):
@@ -139,6 +146,11 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         draw_ellipse = True
         if name == "error":
             color = QtGui.QColor(colors["error"])
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(color)
+
+        elif name == "warning":
+            color = QtGui.QColor(colors["warning"])
             painter.setPen(QtCore.Qt.NoPen)
             painter.setBrush(color)
 
@@ -198,7 +210,7 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         if widget:
             style = widget.style()
         else:
-            style = QtWidgets.QApplicaion.style()
+            style = QtWidgets.QApplication.style()
 
         style.proxy().drawPrimitive(
             QtWidgets.QStyle.PE_PanelItemViewItem, option, painter, widget
@@ -213,16 +225,31 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
         expander_rect = QtCore.QRectF(bg_rect)
         expander_rect.setWidth(expander_rect.height() + 5)
 
+        # Define the frame for the action icon
+        action_rect = QtCore.QRectF(bg_rect)
+        if index.data(PLUGIN_ACTIONS_ROLE):
+            action_rect.setWidth(action_rect.height() + 5)
+            action_rect.translate(
+                bg_rect.width() - action_rect.width(),
+                0
+            )
+            self.action_icon_rects[index] = action_rect
+        else:
+            action_rect.setWidth(0)
+
         label_rect = QtCore.QRectF(
             expander_rect.x() + expander_rect.width(),
             expander_rect.y(),
-            bg_rect.width() - expander_rect.width(),
+            bg_rect.width() - expander_rect.width() - action_rect.width(),
             expander_rect.height()
         )
 
         icon_size = expander_rect.height()
         if index.data(ITEM_ERRORED_ROLE):
-            expander_icon = self._get_icon("error", icon_size)
+            if index.data(ITEM_BLOCKING_ROLE):
+                expander_icon = self._get_icon("error", icon_size)
+            else:
+                expander_icon = self._get_icon("warning", icon_size)
         elif index.data(PLUGIN_SKIPPED_ROLE):
             expander_icon = self._get_icon("skipped", icon_size)
         elif index.data(PLUGIN_PASSED_ROLE):
@@ -233,9 +260,13 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
             expander_icon = self._get_icon("", icon_size)
 
         label = index.data(QtCore.Qt.DisplayRole)
-        label = option.fontMetrics.elidedText(
+        elided_label = option.fontMetrics.elidedText(
             label, QtCore.Qt.ElideRight, label_rect.width()
         )
+
+        # Check if the label is elided and set the tooltip accordingly
+        if label != elided_label:
+            index.model().setData(index, label, QtCore.Qt.ToolTipRole)
 
         painter.save()
         # Draw icon
@@ -247,7 +278,27 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
         # Draw label
         painter.setFont(option.font)
-        painter.drawText(label_rect, QtCore.Qt.AlignVCenter, label)
+        painter.drawText(label_rect, QtCore.Qt.AlignVCenter, elided_label)
+
+        # Draw action icon
+        if index.data(PLUGIN_ACTIONS_ROLE):
+            action_icon = get_pixmap("adn")
+            icon_size = action_rect.height() - 2
+            action_icon_size = QtCore.QSize(icon_size, icon_size)
+            action_icon = action_icon.scaled(action_icon_size,
+                                             QtCore.Qt.KeepAspectRatio,
+                                             QtCore.Qt.SmoothTransformation
+                                             )
+
+            # Adjust label_rect to avoid overlap with action icon
+            label_rect.setWidth(label_rect.width() - action_rect.width() - 10)
+
+            # Draw the action icon inside the defined frame
+            action_icon_point = QtCore.QPoint(
+                action_rect.left() + (action_rect.width() - action_icon.width()) / 2,
+                action_rect.top() + (action_rect.height() - action_icon.height()) / 2
+            )
+            painter.drawPixmap(action_icon_point, action_icon)
 
         # Ok, we're done, tidy up.
         painter.restore()
@@ -329,3 +380,30 @@ class GroupItemDelegate(QtWidgets.QStyledItemDelegate):
 
         # Ok, we're done, tidy up.
         painter.restore()
+
+    def editorEvent(self, event, model, option, index):
+        if event.type() == QtCore.QEvent.MouseButtonPress:
+            pos = event.pos()
+            if index in self.action_icon_rects:
+                if self.action_icon_rects[index].contains(pos):
+                    self.show_actions_menu(option.widget, index)
+                    return True
+        return super().editorEvent(event, model, option, index)
+
+    def show_actions_menu(self, parent_widget, index):
+        actions = index.data(PLUGIN_ACTIONS_ROLE)
+        if not actions:
+            return
+
+        menu = QtWidgets.QMenu(parent_widget)
+        for plugin_action_item in actions:
+            action_button = ActionButton(plugin_action_item, menu)
+            action_button.action_clicked.connect(self._on_action_click)
+            widget_action = QtWidgets.QWidgetAction(menu)
+            widget_action.setDefaultWidget(action_button)
+            menu.addAction(widget_action)
+
+        menu.exec_(QtGui.QCursor.pos())
+
+    def _on_action_click(self, plugin_id, action_id):
+        self._controller.run_action(plugin_id, action_id)

@@ -174,6 +174,10 @@ class QtRemotePublishController(BasePublisherController):
             self.publish_has_validation_errors = event["value"]
             return
 
+        if event.topic == "publish.has_validation_blocking_errors.changed":
+            self.publish_has_validation_blocking_errors = event["value"]
+            return
+
         if event.topic == "publish.finished.changed":
             self.publish_has_finished = event["value"]
             return
